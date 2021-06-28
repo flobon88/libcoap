@@ -713,7 +713,7 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
 #else
 #ifdef HAVE_STRUCT_CMSGHDR
     bytes_written = sendmsg(sock->fd, &mhdr, 0);
-#elif !defined(CONTIKI) /* ! HAVE_STRUCT_CMSGHDR */
+#elif !defined(CONTIKI) /* ! HAVE_STRUCT_CMSGHDR */ //TODO Muss vielleicht geändert werden bei UNIX
     bytes_written = sendto(sock->fd, data, datalen, 0,
                            &session->addr_info.remote.addr.sa,
                            session->addr_info.remote.size);
