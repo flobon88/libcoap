@@ -21,11 +21,13 @@
 #include <sys/types.h>
 #include "libcoap.h"
 
+
+
 #if defined(WITH_LWIP)
 
 #include <lwip/ip_addr.h>
 
-typedef struct coap_address_t {
+typedef struct coap_address_t { //TODO Anpassen
   uint16_t port;
   ip_addr_t addr;
 } coap_address_t;
@@ -54,7 +56,7 @@ coap_address_set_port(coap_address_t *addr, uint16_t port) {
 
 #define _coap_is_mcast_impl(Address) ip_addr_ismulticast(&(Address)->addr)
 
-#elif defined(WITH_CONTIKI)
+#elif defined(WITH_CONTIKI) //TODO Anpassen
 
 #include "uip.h"
 
@@ -95,6 +97,7 @@ typedef struct coap_address_t {
   socklen_t size;           /**< size of addr */
   union {
     struct sockaddr         sa;
+    struct sockaddr_un      su;
     struct sockaddr_in      sin;
     struct sockaddr_in6     sin6;
   } addr;
@@ -160,6 +163,10 @@ coap_address_copy( coap_address_t *dst, const coap_address_t *src ) {
     dst->addr.sin6.sin6_scope_id = src->addr.sin6.sin6_scope_id;
   } else if ( src->addr.sa.sa_family == AF_INET ) {
     dst->addr.sin = src->addr.sin;
+  } else if ( src->addr.sa.sa_family == AF_UNIX) {
+    dst->addr.su = src->addr.su;
+    assert(dst->addr.su.sun_path == src->addr.su.sun_path);
+    strncpy(dst->addr.su.sun_path, src->addr.su.sun_path, sizeof(src->addr.su.sun_path));
   } else {
     memcpy( &dst->addr, &src->addr, src->size );
   }

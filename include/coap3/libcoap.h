@@ -26,6 +26,7 @@ typedef USHORT in_port_t;
 #elif !defined (CONTIKI)
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #endif /* CONTIKI */
 
 #ifndef COAP_STATIC_INLINE

@@ -159,6 +159,9 @@ coap_socket_bind_udp(coap_socket_t *sock,
   u_long u_on = 1;
 #endif
 
+/*Fix AF_UNIX socket address*/
+#define SOCKET_NAME "/tmp/coap_unix_socket.socket"
+
   sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM, 0);
 
   if (sock->fd == COAP_INVALID_SOCKET) {
@@ -206,6 +209,13 @@ coap_socket_bind_udp(coap_socket_t *sock,
     /* ignore error, because likely cause is that IPv4 is disabled at the os
        level */
     break;
+      case AF_UNIX:
+          if (setsockopt(sock->fd, SOL_SOCKET, SO_PASSCRED, OPTVAL_T(&on), sizeof(on)) == COAP_SOCKET_ERROR){
+              coap_log(LOG_ALERT,
+                       "coap_socket_bind_udp: setsockopt SO_PASSCRED: %s\n",
+                       coap_socket_strerror());
+          }
+          break;
   default:
     coap_log(LOG_ALERT, "coap_socket_bind_udp: unsupported sa_family\n");
     break;
@@ -215,6 +225,8 @@ coap_socket_bind_udp(coap_socket_t *sock,
   if (bind(sock->fd, &listen_addr->addr.sa,
            listen_addr->addr.sa.sa_family == AF_INET ?
             (socklen_t)sizeof(struct sockaddr_in) :
+           listen_addr->addr.sa.sa_family == AF_UNIX ?
+           (socklen_t)sizeof(struct sockaddr_un) :
             (socklen_t)listen_addr->size) == COAP_SOCKET_ERROR) {
     coap_log(LOG_WARNING, "coap_socket_bind_udp: bind: %s\n",
              coap_socket_strerror());
@@ -290,7 +302,9 @@ coap_socket_connect_udp(coap_socket_t *sock,
                coap_socket_strerror());
 #endif /* RIOT_VERSION */
     break;
-  default:
+      case AF_UNIX:
+          strncpy(connect_addr.addr.su.sun_path, SOCKET_NAME, sizeof(connect_addr.addr.su.sun_path) - 1);
+      default:
     coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
     break;
   }
@@ -305,6 +319,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
     if (bind(sock->fd, &local_if->addr.sa,
              local_if->addr.sa.sa_family == AF_INET ?
               (socklen_t)sizeof(struct sockaddr_in) :
+             local_if->addr.sa.sa_family == AF_UNIX ?
+             (socklen_t)sizeof(struct sockaddr_un) :
               (socklen_t)local_if->size) == COAP_SOCKET_ERROR) {
       coap_log(LOG_WARNING, "coap_socket_connect_udp: bind: %s\n",
                coap_socket_strerror());
