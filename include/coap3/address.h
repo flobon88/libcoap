@@ -165,8 +165,6 @@ coap_address_copy( coap_address_t *dst, const coap_address_t *src ) {
     dst->addr.sin = src->addr.sin;
   } else if ( src->addr.sa.sa_family == AF_UNIX) {
     dst->addr.su = src->addr.su;
-    assert(dst->addr.su.sun_path == src->addr.su.sun_path);
-    strncpy(dst->addr.su.sun_path, src->addr.su.sun_path, sizeof(src->addr.su.sun_path));
   } else {
     memcpy( &dst->addr, &src->addr, src->size );
   }

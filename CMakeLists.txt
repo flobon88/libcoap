@@ -414,6 +414,7 @@ target_sources(
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_event.c
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_hashkey.c
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_io.c
+          ${CMAKE_CURRENT_LIST_DIR}/src/coap_io_local.c
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_notls.c
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_prng.c
           ${CMAKE_CURRENT_LIST_DIR}/src/coap_session.c
@@ -446,6 +447,7 @@ target_sources(
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap_hashkey.h
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap.h.in
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap_io.h
+          ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap_io_local.h
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap_session.h
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/coap_time.h
           ${CMAKE_CURRENT_LIST_DIR}/include/coap${LIBCOAP_API_VERSION}/encode.h

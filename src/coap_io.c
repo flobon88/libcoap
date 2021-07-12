@@ -210,7 +210,7 @@ coap_socket_bind_udp(coap_socket_t *sock,
        level */
     break;
       case AF_UNIX:
-          if (setsockopt(sock->fd, SOL_SOCKET, SO_PASSCRED, OPTVAL_T(&on), sizeof(on)) == COAP_SOCKET_ERROR){
+          if (setsockopt(sock->fd, SOL_SOCKET, GEN_IP_PKTINFO, OPTVAL_T(&on), sizeof(on)) == COAP_SOCKET_ERROR){
               coap_log(LOG_ALERT,
                        "coap_socket_bind_udp: setsockopt SO_PASSCRED: %s\n",
                        coap_socket_strerror());
@@ -304,6 +304,7 @@ coap_socket_connect_udp(coap_socket_t *sock,
     break;
       case AF_UNIX:
           strncpy(connect_addr.addr.su.sun_path, SOCKET_NAME, sizeof(connect_addr.addr.su.sun_path) - 1);
+          connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
       default:
     coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
     break;
@@ -729,7 +730,7 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
 #else
 #ifdef HAVE_STRUCT_CMSGHDR
     bytes_written = sendmsg(sock->fd, &mhdr, 0);
-#elif !defined(CONTIKI) /* ! HAVE_STRUCT_CMSGHDR */ //TODO Muss vielleicht geändert werden bei UNIX
+#elif !defined(CONTIKI) /* ! HAVE_STRUCT_CMSGHDR */
     bytes_written = sendto(sock->fd, data, datalen, 0,
                            &session->addr_info.remote.addr.sa,
                            session->addr_info.remote.size);
