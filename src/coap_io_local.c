@@ -856,7 +856,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     recv_packet(ip_packet, buffer, BUFFER_SIZE);
     // TODO Ensure the size of the hdr
     switch (ip_packet[0]) {
-        case IPPROTO_IP: //TODO Self defining.
+        case IPPROTO_IP: //TODO define yourself.
             packet->addr_info.remote.size = sizeof(struct sockaddr_in);
             packet->addr_info.remote.addr.sin.sin_family = AF_INET;
             break;
