@@ -159,8 +159,9 @@ coap_socket_bind_udp(coap_socket_t *sock,
   u_long u_on = 1;
 #endif
 
-/*Fix AF_UNIX socket address*/
-#define SOCKET_NAME "/tmp/coap_unix_socket.socket"
+    if(listen_addr->addr.sa.sa_family == AF_UNIX){
+        unlink(listen_addr->addr.su.sun_path);
+    }
 
   sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM, 0);
 
@@ -303,7 +304,7 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
     break;
       case AF_UNIX:
-          strncpy(connect_addr.addr.su.sun_path, SOCKET_NAME, sizeof(connect_addr.addr.su.sun_path) - 1);
+          strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path, sizeof(connect_addr.addr.su.sun_path) - 1);
           connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
       default:
     coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");

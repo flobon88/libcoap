@@ -239,8 +239,9 @@ coap_socket_bind_udp(coap_socket_t *sock,
     u_long u_on = 1;
 #endif
 
-/*Fix AF_UNIX socket address*/
-#define SOCKET_NAME "/tmp/coap_unix_socket.socket"
+    if(listen_addr->addr.sa.sa_family == AF_UNIX){
+        unlink(listen_addr->addr.su.sun_path);
+    }
 
     sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM, 0);
 
@@ -383,8 +384,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
             break;
         case AF_UNIX:
-            strncpy(connect_addr.addr.su.sun_path, SOCKET_NAME, sizeof(connect_addr.addr.su.sun_path) - 1);
-            connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
+            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path, sizeof(connect_addr.addr.su.sun_path) - 1);
+            //connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
         default:
             coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
             break;
@@ -676,9 +677,9 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     }
     if (!coap_debug_send_packet()) {
         bytes_written = (ssize_t)datalen;
-    } else if (sock->flags & COAP_SOCKET_CONNECTED) {
+    } /*else if (sock->flags & COAP_SOCKET_CONNECTED) {
         bytes_written = send(sock->fd, data, datalen, 0);
-    } else {
+    } */else {
         bytes_written = sendto(sock->fd, data, datalen, 0,
                                &session->addr_info.remote.addr.sa,
                                session->addr_info.remote.size);
@@ -714,7 +715,9 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     ssize_t hdr_len = -1;
 
 
-    len = read(sock->fd, buffer, BUFFER_SIZE); //TODO Nonblocking read. With sockopt. Maybe: recv(MSG_DONTWAIT)
+    //len = read(sock->fd, buffer, BUFFER_SIZE); //TODO Nonblocking read. With sockopt. Maybe: recv(MSG_DONTWAIT)
+    socklen_t sock_size = sizeof(struct sockaddr_un);
+    len = recvfrom(sock->fd, buffer, BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *) &sock->session->addr_info.remote.addr, &sock_size);
     if (len == -1) {
         coap_log(LOG_ERR,
                  "%s: read AF_UNIX socket failed: %s (%d)\n",
