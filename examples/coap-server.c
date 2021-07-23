@@ -639,7 +639,6 @@ main(int argc, char **argv) {
             tv.tv_usec = (wait_ms % 1000) * 1000;
             /* Wait until any i/o takes place or timeout */
             result = select(nfds, &readfds, NULL, NULL, &tv);
-
             if (result == -1) {
                 if (errno != EAGAIN) {
                     coap_log(LOG_DEBUG, "select: %s (%d)\n", coap_socket_strerror(), errno);

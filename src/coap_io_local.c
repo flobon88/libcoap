@@ -161,31 +161,43 @@ void coap_socket_close(coap_socket_t *sock) {
 
 #define IP_HDR_VER4 ((uint8_t)0004)
 #define IP_HDR_VER6 ((uint8_t)0006)
+#define IP_HDR_INDEX_ADDR_REMOTE_VER4 ((ssize_t)1)
+#define IP_HDR_INDEX_ADDR_LOCAL_VER4 ((ssize_t)5)
+#define IP_HDR_INDEX_PORT_REMOTE_VER4 ((ssize_t)9)
+#define IP_HDR_INDEX_PORT_LOCAL_VER4 ((ssize_t)11)
+#define IP_HDR_SIZE_VER4 ((ssize_t)13)
+#define IP_HDR_INDEX_ADDR_REMOTE_VER6 ((ssize_t)1)
+#define IP_HDR_INDEX_ADDR_LOCAL_VER6 ((ssize_t)17)
+#define IP_HDR_INDEX_PORT_REMOTE_VER6 ((ssize_t)33)
+#define IP_HDR_INDEX_PORT_LOCAL_VER6 ((ssize_t)35)
+#define IP_HDR_SIZE_VER6 ((ssize_t)37)
 
 
-void send_packet(const uint8_t *p, size_t len, void (*send_char)(uint8_t data)) {
-
-    send_char(SLIP_END);
+ssize_t send_packet(uint8_t *p, const uint8_t *data, size_t len) {
+    ssize_t send = 0;
+    p[send++] = SLIP_END;
 
     while (len--) {
-        switch (*p) {
+        switch (*data) {
             case SLIP_END:
-                send_char(SLIP_ESC);
-                send_char(SLIP_ESC_END);
+                p[send++] = SLIP_ESC;
+                p[send++] = SLIP_ESC_END;
                 break;
             case SLIP_ESC:
-                send_char(SLIP_ESC);
-                send_char(SLIP_ESC_ESC);
+                p[send++] = SLIP_ESC;
+                p[send++] = SLIP_ESC_ESC;
                 break;
-                send_char(*p);
+            default:
+                p[send++] = *data;
         }
 
-        p++;
+        data++;
     }
-    send_char(SLIP_END);
+    p[send++] = SLIP_END;
+    return send;
 }
 
-int recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
+ssize_t recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
     uint8_t c;
     int received = 0;
     for (int i = 0; i < len; i++) {
@@ -198,7 +210,8 @@ int recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
                     break;
             case SLIP_ESC:
                 assert(i + 1 < len);
-                c = data[i + 1];
+                i++;
+                c = data[i];
                 switch (c) {
                     case SLIP_ESC_END:
                         c = SLIP_END;
@@ -207,14 +220,14 @@ int recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
                         c = SLIP_ESC;
                         break;
                     default:
-                        return -2;
+                        return -1;
                 }
             default:
                 if (received < len)
                     p[received++] = c;
         }
     }
-    return -1;
+    return received;
 }
 
 
@@ -239,7 +252,7 @@ coap_socket_bind_udp(coap_socket_t *sock,
     u_long u_on = 1;
 #endif
 
-    if(listen_addr->addr.sa.sa_family == AF_UNIX){
+    if (listen_addr->addr.sa.sa_family == AF_UNIX) {
         unlink(listen_addr->addr.su.sun_path);
     }
 
@@ -314,7 +327,8 @@ coap_socket_bind_udp(coap_socket_t *sock,
         goto error;
     }
 
-    bound_addr->size = (socklen_t) sizeof(*bound_addr);
+    bound_addr->size = (socklen_t)
+            sizeof(*bound_addr);
     if (getsockname(sock->fd, &bound_addr->addr.sa, &bound_addr->size) < 0) {
         coap_log(LOG_WARNING,
                  "coap_socket_bind_udp: getsockname: %s\n",
@@ -384,7 +398,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
             break;
         case AF_UNIX:
-            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path, sizeof(connect_addr.addr.su.sun_path) - 1);
+            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,
+                    sizeof(connect_addr.addr.su.sun_path) - 1);
             //connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
         default:
             coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
@@ -668,23 +683,54 @@ static __declspec(thread) LPFN_WSARECVMSG lpWSARecvMsg = NULL;
 ssize_t
 coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint8_t *data, size_t datalen) {
     ssize_t bytes_written = 0;
+    uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
+    ssize_t packet_index = 0;
+    memset(&ip_packet,'\000',datalen + IP_HDR_SIZE_VER6);
+
     switch (session->addr_info.remote.addr.sa.sa_family) {
+
         case AF_INET:
+            ip_packet[0] = IP_HDR_VER4;
+            packet_index = IP_HDR_SIZE_VER4;
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &sock->session->addr_info.remote.addr.sin.sin_addr,
+                   sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &sock->session->addr_info.local.addr.sin.sin_addr,
+                   sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &sock->session->addr_info.remote.addr.sin.sin_port,
+                   sizeof(in_port_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &sock->session->addr_info.local.addr.sin.sin_port,
+                   sizeof(in_port_t));
             break;
+
         case AF_INET6:
+            ip_packet[0] = IP_HDR_VER6;
+            packet_index = IP_HDR_SIZE_VER6;
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6], &sock->session->addr_info.remote.addr.sin6.sin6_addr,
+                   sizeof(uint8_t) * 16);
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6], &sock->session->addr_info.local.addr.sin6.sin6_addr,
+                   sizeof(uint8_t) * 16);
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], &sock->session->addr_info.remote.addr.sin6.sin6_port,
+                   sizeof(in_port_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], &sock->session->addr_info.local.addr.sin6.sin6_port,
+                   sizeof(in_port_t));
             break;
 
     }
-    if (!coap_debug_send_packet()) {
-        bytes_written = (ssize_t)datalen;
-    } /*else if (sock->flags & COAP_SOCKET_CONNECTED) {
-        bytes_written = send(sock->fd, data, datalen, 0);
-    } */else {
-        bytes_written = sendto(sock->fd, data, datalen, 0,
-                               &session->addr_info.remote.addr.sa,
-                               session->addr_info.remote.size);
-    }
 
+    memcpy(&ip_packet[packet_index], &data, sizeof(data));
+
+    // To ensure that the control data of the slip protocol fits into the slip_packet.
+    uint8_t slip_packet[(datalen + packet_index) * 4];
+    memset(slip_packet,'\000',(datalen + packet_index) * 4);
+    ssize_t slip_packet_len = send_packet(slip_packet, ip_packet, datalen + packet_index);
+
+    if (!coap_debug_send_packet()) {
+        bytes_written = (ssize_t) datalen;
+    } else {
+        bytes_written = sendto(sock->fd, slip_packet, slip_packet_len, 0,
+                               (const struct sockaddr *) &sock->remote_endpoint,
+                               sizeof(struct sockaddr_un));
+    }
     return bytes_written;
 }
 
@@ -713,11 +759,13 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     ssize_t len = -1;
     ssize_t payload_len = -1;
     ssize_t hdr_len = -1;
+    uint16_t port;
+    uint32_t ip_address;
 
 
     //len = read(sock->fd, buffer, BUFFER_SIZE); //TODO Nonblocking read. With sockopt. Maybe: recv(MSG_DONTWAIT)
     socklen_t sock_size = sizeof(struct sockaddr_un);
-    len = recvfrom(sock->fd, buffer, BUFFER_SIZE, MSG_DONTWAIT, (struct sockaddr *) &sock->session->addr_info.remote.addr, &sock_size);
+    len = recvfrom(sock->fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
     if (len == -1) {
         coap_log(LOG_ERR,
                  "%s: read AF_UNIX socket failed: %s (%d)\n",
@@ -729,7 +777,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
     packet->ifindex = sock->fd;
 
-    if (recv_packet(ip_packet, buffer, BUFFER_SIZE) == -1) {
+    if (recv_packet(ip_packet, buffer, len) == -1) {
         coap_log(LOG_ERR,
                  "%s: SLIP protocol failed: %s (%d)\n",
                  "coap_network_read",
@@ -737,10 +785,10 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     }
 
     switch (ip_packet[0]) {
-        case IP_HDR_VER4: //TODO define yourself.
-            hdr_len = 13;
+        case IP_HDR_VER4:
+            hdr_len = IP_HDR_SIZE_VER4;
             payload_len = len - hdr_len < -1 ? -1 : len - hdr_len;
-            if (payload_len < 0) { //TODO Frage: wenn LOG_ERR erscheint, wie verhält sich das Programm? Abbruch?
+            if (payload_len < 0) {
                 coap_log(LOG_ERR,
                          "%s: receive header fpr ipv4 failed: %s (%d)\n",
                          "coap_network_read",
@@ -753,16 +801,18 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in);
             packet->addr_info.remote.addr.sin.sin_family = AF_INET;
             packet->addr_info.local.addr.sin.sin_family = AF_INET;
-            memcpy(&packet->addr_info.remote.addr.sin.sin_addr, &ip_packet[1], sizeof(in_addr_t));
-            memcpy(&packet->addr_info.local.addr.sin.sin_addr, &ip_packet[5], sizeof(in_addr_t));
-            memcpy(&packet->addr_info.remote.addr.sin.sin_port, &ip_packet[9], sizeof(in_port_t));
-            memcpy(&packet->addr_info.local.addr.sin.sin_port, &ip_packet[11], sizeof(in_port_t));
-            /*TODO Problem: Wird jemals aus dem packet die Adresse entnommen, um ein Socket zu initialisieren
-             * oder sind aufgebauter socket und Pakete immer getrennt betrachtet. Problem ist, da coap_address_t
-             * union ist und sich sonst überschreiben würden.*/
+            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
+            memcpy(&packet->addr_info.remote.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
+            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
+            memcpy(&packet->addr_info.local.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
+            packet->addr_info.remote.addr.sin.sin_port = htons(port);
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
+            packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
+
         case IP_HDR_VER6:
-            hdr_len = 37;
+            hdr_len = IP_HDR_SIZE_VER6;
             payload_len = len - hdr_len < -1 ? -1 : len - hdr_len;
             if (payload_len < 0) {
                 coap_log(LOG_ERR,
@@ -775,11 +825,16 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in6);
             packet->addr_info.remote.addr.sin6.sin6_family = AF_INET6;
             packet->addr_info.local.addr.sin6.sin6_family = AF_INET6;
-            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &ip_packet[1], sizeof(uint8_t) * 16);
-            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &ip_packet[17], sizeof(uint8_t) * 16);
-            memcpy(&packet->addr_info.remote.addr.sin6.sin6_port, &ip_packet[33], sizeof(in_port_t));
-            memcpy(&packet->addr_info.local.addr.sin6.sin6_port, &ip_packet[35], sizeof(in_port_t));
+            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
+                   sizeof(uint8_t) * 16);
+            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
+                   sizeof(uint8_t) * 16);
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
+            packet->addr_info.remote.addr.sin.sin_port = htons(port);
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
+            packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
+
         default:
             coap_log(LOG_ERR,
                      "%s: ip address version not correct: %s (%d)\n",
@@ -795,7 +850,6 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     if (payload_len >= 0 || hdr_len >= 0) {
         packet->length = (payload_len > 0) ? payload_len : 0;
         memcpy(packet->payload, &ip_packet[hdr_len], payload_len);
-        memset(&packet->addr_info.remote.addr, 0, sizeof(packet->addr_info.remote.addr));
         if (LOG_DEBUG <= coap_get_log_level()) {
             unsigned char addr_str[INET6_ADDRSTRLEN + 8];
 
@@ -1230,8 +1284,8 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             nfds = epoll_wait(ctx->epfd, events, COAP_MAX_EPOLL_EVENTS, etimeout);
             if (nfds < 0) {
                 if (errno != EINTR) {
-                    coap_log (LOG_ERR, "epoll_wait: unexpected error: %s (%d)\n",
-                              coap_socket_strerror(), nfds);
+                    coap_log(LOG_ERR, "epoll_wait: unexpected error: %s (%d)\n",
+                             coap_socket_strerror(), nfds);
                 }
                 break;
             }

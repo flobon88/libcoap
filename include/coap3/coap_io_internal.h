@@ -33,6 +33,7 @@ struct coap_socket_t {
   coap_session_t *session; /* Used by the epoll logic for an active session. */
   coap_endpoint_t *endpoint; /* Used by the epoll logic for a listening
                                 endpoint. */
+  coap_address_t remote_endpoint; /* Used by UNIX with UDP */
 };
 
 /**
