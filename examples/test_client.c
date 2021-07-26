@@ -1,6 +1,3 @@
-//
-// Created by laax on 23.07.21.
-//
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -112,7 +109,7 @@ int
 main(int argc, char *argv[]) {
     struct sockaddr_un svaddr, claddr, server_addr;
     int sfd, j;
-    size_t msgLen = 30;
+    size_t msgLen = 25;
     ssize_t numBytes;
     char resp[108];
 
@@ -162,9 +159,16 @@ main(int argc, char *argv[]) {
     msg[10] = '\001';
     msg[11] = 4;
     msg[12] = 3;
-    for(int i = 13; i < msgLen; i++){
+    msg[13] = 0x55;
+    msg[14] = 0x73;
+    msg[15] = 0x12;
+    msg[16] = 0x34;
+    for(int i = 17; i < 22; i++){
         msg[i] = 'a' + i;
     }
+    msg[22] = '\000';
+    msg[23] = 0xc1;
+    msg[24] = 0x00;
     uint32_t packet_len = 3 * msgLen;
     uint8_t packet[packet_len];
     memset(packet,'\000',packet_len);
@@ -186,4 +190,3 @@ main(int argc, char *argv[]) {
     remove(claddr.sun_path);            /* Remove client socket pathname */
     exit(EXIT_SUCCESS);
 }
-

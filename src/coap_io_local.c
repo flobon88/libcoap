@@ -690,28 +690,24 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     switch (session->addr_info.remote.addr.sa.sa_family) {
 
         case AF_INET:
-            ip_packet[0] = IP_HDR_VER4;
+            ip_packet[0] = IP_HDR_VER4; //TODO hier fehler
             packet_index = IP_HDR_SIZE_VER4;
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &sock->session->addr_info.remote.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &sock->session->addr_info.local.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &sock->session->addr_info.remote.addr.sin.sin_port,
-                   sizeof(in_port_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &sock->session->addr_info.local.addr.sin.sin_port,
-                   sizeof(in_port_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_addr,sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_addr,sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_port,sizeof(in_port_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_port,sizeof(in_port_t));
             break;
 
         case AF_INET6:
             ip_packet[0] = IP_HDR_VER6;
             packet_index = IP_HDR_SIZE_VER6;
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6], &sock->session->addr_info.remote.addr.sin6.sin6_addr,
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6], &session->addr_info.remote.addr.sin6.sin6_addr,
                    sizeof(uint8_t) * 16);
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6], &sock->session->addr_info.local.addr.sin6.sin6_addr,
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6], &session->addr_info.local.addr.sin6.sin6_addr,
                    sizeof(uint8_t) * 16);
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], &sock->session->addr_info.remote.addr.sin6.sin6_port,
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], &session->addr_info.remote.addr.sin6.sin6_port,
                    sizeof(in_port_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], &sock->session->addr_info.local.addr.sin6.sin6_port,
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], &session->addr_info.local.addr.sin6.sin6_port,
                    sizeof(in_port_t));
             break;
 
@@ -849,6 +845,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     }
     if (payload_len >= 0 || hdr_len >= 0) {
         packet->length = (payload_len > 0) ? payload_len : 0;
+        memset(packet->payload, '\000', payload_len);
         memcpy(packet->payload, &ip_packet[hdr_len], payload_len);
         if (LOG_DEBUG <= coap_get_log_level()) {
             unsigned char addr_str[INET6_ADDRSTRLEN + 8];
