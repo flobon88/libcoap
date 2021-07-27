@@ -109,7 +109,6 @@ int
 main(int argc, char *argv[]) {
     struct sockaddr_un svaddr, claddr, server_addr;
     int sfd, j;
-    size_t msgLen = 25;
     ssize_t numBytes;
     char resp[108];
 
@@ -145,8 +144,15 @@ main(int argc, char *argv[]) {
 
     //for (j = 1; j < argc; j++) {
     //msgLen = strlen(argv[j]);       /* May be longer than BUF_SIZE */
-    uint8_t msg[msgLen];
-    msg[0] = '\004';
+    const uint8_t msg[] = {
+            '\004','\201','\250','\262','\020','\201','\250','\262','\014','\002','\001','\002','\001',
+            0x55,0x73,0x12,0x34,'t','o','k','e','n','\000',0xc1,0x00,0xFF,'t','o','k','e','n','t','o','k','e','n','t','o','k','e','n'
+            ,'t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n'
+            ,'t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n'
+            ,'t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n','t','o','k','e','n'};
+
+    size_t msgLen = sizeof(msg) / sizeof(uint8_t);
+    /*msg[0] = '\004';
     msg[1] = 192;
     msg[2] = 168;
     msg[3] = 178;
@@ -168,7 +174,7 @@ main(int argc, char *argv[]) {
     }
     msg[22] = '\000';
     msg[23] = 0xc1;
-    msg[24] = 0x00;
+    msg[24] = 0x00;*/
     uint32_t packet_len = 3 * msgLen;
     uint8_t packet[packet_len];
     memset(packet,'\000',packet_len);

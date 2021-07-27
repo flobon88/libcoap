@@ -690,7 +690,7 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     switch (session->addr_info.remote.addr.sa.sa_family) {
 
         case AF_INET:
-            ip_packet[0] = IP_HDR_VER4; //TODO hier fehler
+            ip_packet[0] = IP_HDR_VER4;
             packet_index = IP_HDR_SIZE_VER4;
             memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_addr,sizeof(in_addr_t));
             memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_addr,sizeof(in_addr_t));
@@ -759,7 +759,6 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     uint32_t ip_address;
 
 
-    //len = read(sock->fd, buffer, BUFFER_SIZE); //TODO Nonblocking read. With sockopt. Maybe: recv(MSG_DONTWAIT)
     socklen_t sock_size = sizeof(struct sockaddr_un);
     len = recvfrom(sock->fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
     if (len == -1) {
@@ -791,7 +790,6 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
                          coap_socket_strerror(), errno);
                 break;
             }
-            //TODO Remove magic numbers
             payload_len = len - hdr_len;
             packet->addr_info.remote.size = sizeof(struct sockaddr_in);
             packet->addr_info.local.size = sizeof(struct sockaddr_in);
