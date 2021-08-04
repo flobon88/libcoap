@@ -79,7 +79,7 @@ static int verify_peer_cert = 1; /* PKI granularity - by default set */
 #define MAX_KEY   64 /* Maximum length of a pre-shared key in bytes. */
 static uint8_t *key = NULL;
 static ssize_t key_length = 0;
-int key_defined = 0;
+int key_defined = 1;
 static const char *hint = NULL;
 
 
@@ -429,7 +429,7 @@ get_context(const char *node, const char *port) {
     ep_udp = coap_new_endpoint(ctx, &addr, COAP_PROTO_UDP);
     if (ep_udp) {
         if (coap_dtls_is_supported() && (key_defined)) {
-            ep_dtls = coap_new_endpoint(ctx, &addrs, COAP_PROTO_DTLS);
+            ep_dtls = coap_new_endpoint(ctx, &addr, COAP_PROTO_DTLS);
             if (!ep_dtls)
                 coap_log(LOG_CRIT, "cannot create DTLS endpoint\n");
         }

@@ -716,14 +716,14 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     memcpy(&ip_packet[packet_index], &data, sizeof(data));
 
     // To ensure that the control data of the slip protocol fits into the slip_packet.
-    uint8_t slip_packet[(datalen + packet_index) * 4];
-    memset(slip_packet,'\000',(datalen + packet_index) * 4);
-    ssize_t slip_packet_len = send_packet(slip_packet, ip_packet, datalen + packet_index);
+    //uint8_t slip_packet[(datalen + packet_index) * 4];
+    //memset(slip_packet,'\000',(datalen + packet_index) * 4);
+    //ssize_t slip_packet_len = send_packet(slip_packet, ip_packet, datalen + packet_index);
 
     if (!coap_debug_send_packet()) {
         bytes_written = (ssize_t) datalen;
     } else {
-        bytes_written = sendto(sock->fd, slip_packet, slip_packet_len, 0,
+        bytes_written = sendto(sock->fd, ip_packet/*slip_packet*/, datalen + packet_index/*slip_packet_len*/, 0,
                                (const struct sockaddr *) &sock->remote_endpoint,
                                sizeof(struct sockaddr_un));
     }
@@ -760,7 +760,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
 
     socklen_t sock_size = sizeof(struct sockaddr_un);
-    len = recvfrom(sock->fd, buffer, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
+    len = recvfrom(sock->fd, ip_packet/*buffer*/, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
     if (len == -1) {
         coap_log(LOG_ERR,
                  "%s: read AF_UNIX socket failed: %s (%d)\n",
@@ -772,12 +772,12 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
     packet->ifindex = sock->fd;
 
-    if (recv_packet(ip_packet, buffer, len) == -1) {
+    /*if (recv_packet(ip_packet, buffer, len) == -1) {
         coap_log(LOG_ERR,
                  "%s: SLIP protocol failed: %s (%d)\n",
                  "coap_network_read",
                  coap_socket_strerror(), errno);
-    }
+    }*/
 
     switch (ip_packet[0]) {
         case IP_HDR_VER4:
