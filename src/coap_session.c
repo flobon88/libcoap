@@ -558,7 +558,20 @@ coap_endpoint_get_session(coap_endpoint_t *endpoint,
   coap_session_t *oldest = NULL;
   coap_session_t *oldest_hs = NULL;
   coap_addr_hash_t addr_hash;
+  //////////////
+  FILE * fPtr;
+  char path[] = "coap_dtls_session.txt";
+  char text[] = "er will eine session machen.\n";
 
+  fPtr = fopen(path, "w");
+  if(fPtr == NULL) {
+      printf("Unable to create file.\n");
+      exit(EXIT_FAILURE);
+  }
+  fputs((const char*) text, fPtr);
+  fclose(fPtr);
+  printf("File created and saved successfully. :) \n");
+  /////////////
   coap_make_addr_hash(&addr_hash, endpoint->proto, &packet->addr_info);
   SESSIONS_FIND(endpoint->sessions, addr_hash, session);
   if (session) {
@@ -650,15 +663,43 @@ coap_endpoint_get_session(coap_endpoint_t *endpoint,
     const uint8_t *payload = (const uint8_t*)packet->payload;
     size_t length = packet->length;
 #endif /* ! WITH_LWIP */
-    if (length < (OFF_HANDSHAKE_TYPE + 1)) {
+    if (length < (OFF_HANDSHAKE_TYPE + 1)) { // TODO length passt irgendwie nicht. Kommt vom packet->length = 1472 packet->payload = 48
       coap_log(LOG_DEBUG,
          "coap_dtls_hello: ContentType %d Short Packet (%zu < %d) dropped\n",
          payload[OFF_CONTENT_TYPE], length,
          OFF_HANDSHAKE_TYPE + 1);
+      //////////////
+      FILE * fPtr;
+      char path[] = "coap_dtls_hello.txt";
+      char text[] = "ContentType %d Short Packet (%zu < %d) dropped\n";
+
+      fPtr = fopen(path, "w");
+      if(fPtr == NULL) {
+          printf("Unable to create file.\n");
+          exit(EXIT_FAILURE);
+      }
+      fputs((const char*) text, fPtr);
+      fclose(fPtr);
+      printf("File created and saved successfully. :) \n");
+      /////////////
       return NULL;
     }
-    if (payload[OFF_CONTENT_TYPE] != DTLS_CT_HANDSHAKE ||
+    if (payload[OFF_CONTENT_TYPE] != DTLS_CT_HANDSHAKE || // TODO In AFL herausfinden, wie ein dtls gesendet werden kann.
         payload[OFF_HANDSHAKE_TYPE] != DTLS_HT_CLIENT_HELLO) {
+        //////////////
+        FILE * fPtr;
+        char path[] = "DieDateiSollteNichtSeinHandshake.txt";
+        char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
+
+        fPtr = fopen(path, "w");
+        if(fPtr == NULL) {
+            printf("Unable to create file.\n");
+            exit(EXIT_FAILURE);
+        }
+        fputs((const char*) text, fPtr);
+        fclose(fPtr);
+        printf("File created and saved successfully. :) \n");
+        /////////////
       /* only log if not a late alert */
       if (payload[OFF_CONTENT_TYPE] != DTLS_CT_ALERT)
         coap_log(LOG_DEBUG,

@@ -1431,8 +1431,24 @@ coap_handle_dgram_for_proto(coap_context_t *ctx, coap_session_t *session, coap_p
   coap_packet_get_memmapped(packet, &data, &data_len);
 
   if (session->proto == COAP_PROTO_DTLS) {
-    if (session->type == COAP_SESSION_TYPE_HELLO)
+      //////////////
+      FILE * fPtr;
+      char path[] = "COAP_PROTO_DTLS_IS_DA.txt";
+      char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
+
+      fPtr = fopen(path, "w");
+      if(fPtr == NULL) {
+          printf("Unable to create file.\n");
+          exit(EXIT_FAILURE);
+      }
+      fputs((const char*) text, fPtr);
+      fclose(fPtr);
+      printf("File created and saved successfully. :) \n");
+      /////////////
+    if (session->type == COAP_SESSION_TYPE_HELLO){
+
       result = coap_dtls_hello(session, data, data_len);
+    }
     else if (session->tls)
       result = coap_dtls_receive(session, data, data_len);
   } else if (session->proto == COAP_PROTO_UDP) {
@@ -1698,6 +1714,19 @@ coap_read_endpoint(coap_context_t *ctx, coap_endpoint_t *endpoint, coap_tick_t n
   bytes_read = ctx->network_read(&endpoint->sock, packet);
 
   if (bytes_read < 0) {
+      ////////////// TODO die Sachen, die er bekommt, werden von ip gefressen und kommen nicht an. In afl muss irgendwo anders der kram gesendet werden.
+      FILE * fPtr;
+      char path[40];
+      snprintf(path, 40, "bytes_read%d.txt",getpid());
+      fPtr = fopen(path, "w");
+      if(fPtr == NULL) {
+          printf("Unable to create file.\n");
+          exit(EXIT_FAILURE);
+      }
+      fputs((const char*) coap_socket_strerror(), fPtr);
+      fclose(fPtr);
+      printf("File created and saved successfully. :) \n");
+      /////////////
     coap_log(LOG_WARNING, "*  %s: read failed\n", coap_endpoint_str(endpoint));
   } else if (bytes_read > 0) {
     coap_session_t *session = coap_endpoint_get_session(endpoint, packet, now);
@@ -1705,8 +1734,23 @@ coap_read_endpoint(coap_context_t *ctx, coap_endpoint_t *endpoint, coap_tick_t n
       coap_log(LOG_DEBUG, "*  %s: received %zd bytes\n",
                coap_session_str(session), bytes_read);
       result = coap_handle_dgram_for_proto(ctx, session, packet);
-      if (endpoint->proto == COAP_PROTO_DTLS && session->type == COAP_SESSION_TYPE_HELLO && result == 1)
+      if (endpoint->proto == COAP_PROTO_DTLS && session->type == COAP_SESSION_TYPE_HELLO && result == 1){
         coap_session_new_dtls_session(session, now);
+        //////////////
+        FILE * fPtr;
+        char path[] = "DieDateiSollteEsGebenDenkeIch.txt";
+        char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
+
+        fPtr = fopen(path, "w");
+        if(fPtr == NULL) {
+            printf("Unable to create file.\n");
+            exit(EXIT_FAILURE);
+        }
+        fputs((const char*) text, fPtr);
+        fclose(fPtr);
+        printf("File created and saved successfully. :) \n");
+        /////////////
+      }
     }
   }
 #if COAP_CONSTRAINED_STACK
