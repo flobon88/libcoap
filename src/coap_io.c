@@ -717,22 +717,9 @@ static __declspec(thread) LPFN_WSARECVMSG lpWSARecvMsg = NULL;
 ssize_t
 coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint8_t *data, size_t datalen) {
     ssize_t bytes_written = 0;
-    uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
+    /*uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
     ssize_t packet_index = 0;
     memset(&ip_packet, '\000', datalen + IP_HDR_SIZE_VER6);
-    //////////////
-    FILE *fPtr;
-    char path[40];
-    snprintf(path, 40, "coap_network_send%d.txt", getpid());
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) coap_socket_strerror(), fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
 
     switch (session->addr_info.remote.addr.sa.sa_family) {
 
@@ -764,7 +751,7 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
 
     }
 
-    memcpy(&ip_packet[packet_index], &data, sizeof(data));
+    memcpy(&ip_packet[packet_index], &data, sizeof(data));*/
 
     // To ensure that the control data of the slip protocol fits into the slip_packet.
     //uint8_t slip_packet[(datalen + packet_index) * 4];
@@ -774,10 +761,28 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     if (!coap_debug_send_packet()) {
         bytes_written = (ssize_t) datalen;
     } else {
-        bytes_written = sendto(sock->fd, ip_packet/*slip_packet*/, datalen + packet_index/*slip_packet_len*/, 0,
+        //bytes_written = sendto(sock->fd, ip_packet/*slip_packet*/, datalen + packet_index/*slip_packet_len*/, 0,
+        //(const struct sockaddr *) &sock->remote_endpoint.addr.su,
+        //sizeof(struct sockaddr_un));
+        bytes_written = sendto(sock->fd, data, datalen, 0,
                                (const struct sockaddr *) &sock->remote_endpoint.addr.su,
                                sizeof(struct sockaddr_un));
-
+        //bytes_written = write(sock->fd,data,datalen);
+        //////////////
+        FILE *fPtr;
+        char path[40];
+        snprintf(path, 40, "coap_network_send%d.txt", getpid());
+        fPtr = fopen(path, "w");
+        if (fPtr == NULL) {
+            printf("Unable to create file.\n");
+            exit(EXIT_FAILURE);
+        }
+        fputs((const char *) data, fPtr);
+        fputs((const char *) "  to: ", fPtr);
+        fputs((const char *) sock->remote_endpoint.addr.su.sun_path, fPtr);
+        fclose(fPtr);
+        printf("File created and saved successfully. :) \n");
+        /////////////
         perror("send error: ");
     }
     return bytes_written;
@@ -829,6 +834,7 @@ coap_packet_get_memmapped(coap_packet_t *packet, unsigned char **address, size_t
 }*/
 
 #include <arpa/inet.h>
+
 ssize_t
 coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     assert(sock);
@@ -848,7 +854,12 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     perror("connection error: ");
     socklen_t sock_size = sizeof(struct sockaddr_un);
     memset(&sock->remote_endpoint, 0, sizeof(coap_address_t));
-    len = recv_packet(ip_packet, BUFFER_SIZE, sock->fd, &sock->remote_endpoint, sock_size);
+    //len = recv_packet(ip_packet, BUFFER_SIZE, sock->fd, &sock->remote_endpoint, sock_size);
+    len = recvfrom(sock->fd, &ip_packet, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
+    char path[108];
+    memset(path,0,108);
+    snprintf(path, 108, "/tmp%s", sock->remote_endpoint.addr.su.sun_path);
+    memcpy(&sock->remote_endpoint.addr.su.sun_path,&path,108);
     perror("connection error: ");
     if (len == -1) {
         coap_log(LOG_ERR,
@@ -872,7 +883,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     packet->addr_info.local.size = sizeof(struct sockaddr_in);
     packet->addr_info.remote.addr.sin.sin_family = AF_INET;
     packet->addr_info.local.addr.sin.sin_family = AF_INET;
-    packet->addr_info.remote.addr.sin.sin_addr.s_addr =  inet_addr("127.0.0.1");
+    packet->addr_info.remote.addr.sin.sin_addr.s_addr = inet_addr("127.0.0.1");
     packet->addr_info.local.addr.sin.sin_addr.s_addr = inet_addr("127.0.0.1");
     packet->addr_info.remote.addr.sin.sin_port = htons(port);
     packet->addr_info.local.addr.sin.sin_port = htons(port2);
@@ -885,16 +896,16 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
         memset(packet->payload, '\000', COAP_RXBUFFER_SIZE);
         memcpy(packet->payload, &ip_packet, len);
         //////////////
-        FILE * fPtr;
+        FILE *fPtr;
         char path[] = "PAYLOAD.txt";
         char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
 
         fPtr = fopen(path, "w");
-        if(fPtr == NULL) {
+        if (fPtr == NULL) {
             printf("Unable to create file.\n");
             exit(EXIT_FAILURE);
         }
-        fputs((const char*) packet->payload, fPtr);
+        fputs((const char *) packet->payload, fPtr);
         fclose(fPtr);
         printf("File created and saved successfully. :) \n");
         /////////////
