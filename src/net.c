@@ -1714,19 +1714,6 @@ coap_read_endpoint(coap_context_t *ctx, coap_endpoint_t *endpoint, coap_tick_t n
   bytes_read = ctx->network_read(&endpoint->sock, packet);
 
   if (bytes_read < 0) {
-      ////////////// TODO die Sachen, die er bekommt, werden von ip gefressen und kommen nicht an. In afl muss irgendwo anders der kram gesendet werden.
-      FILE * fPtr;
-      char path[40];
-      snprintf(path, 40, "bytes_read%d.txt",getpid());
-      fPtr = fopen(path, "w");
-      if(fPtr == NULL) {
-          printf("Unable to create file.\n");
-          exit(EXIT_FAILURE);
-      }
-      fputs((const char*) coap_socket_strerror(), fPtr);
-      fclose(fPtr);
-      printf("File created and saved successfully. :) \n");
-      /////////////
     coap_log(LOG_WARNING, "*  %s: read failed\n", coap_endpoint_str(endpoint));
   } else if (bytes_read > 0) {
     coap_session_t *session = coap_endpoint_get_session(endpoint, packet, now);

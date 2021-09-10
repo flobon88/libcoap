@@ -153,6 +153,7 @@ void coap_socket_close(coap_socket_t *sock) {
 #include "coap_config.h"
 #include <errno.h>
 #include <stdio.h>
+#include <arpa/inet.h>
 
 #define SLIP_END     ((uint8_t)0300)
 #define SLIP_ESC     ((uint8_t)0333)
@@ -173,8 +174,7 @@ void coap_socket_close(coap_socket_t *sock) {
 #define IP_HDR_SIZE_VER6 ((ssize_t)37)
 #define BUFFER_SIZE UINT16_MAX
 
-
-ssize_t send_packet(uint8_t *p, const uint8_t *data, size_t len) {
+ssize_t slip_proto(uint8_t *p, const uint8_t *data, size_t len) {
     ssize_t send = 0;
     p[send++] = SLIP_END;
 
@@ -198,29 +198,60 @@ ssize_t send_packet(uint8_t *p, const uint8_t *data, size_t len) {
     return send;
 }
 
-ssize_t recv_packet(uint8_t *p, size_t len, int fd, coap_address_t *remote_endpoint, socklen_t sock_size) {
+ssize_t recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
+    uint8_t c;
+    int received = 0;
+    for (int i = 0; i < len; i++) {
+        c = data[i];
+        switch (c) {
+            case SLIP_END:
+                if (received)
+                    return received;
+                else
+                    break;
+            case SLIP_ESC:
+                assert(i + 1 < len);
+                i++;
+                c = data[i];
+                switch (c) {
+                    case SLIP_ESC_END:
+                        c = SLIP_END;
+                        break;
+                    case SLIP_ESC_ESC:
+                        c = SLIP_ESC;
+                        break;
+                    default:
+                        return -1;
+                }
+            default:
+                if (received < len)
+                    p[received++] = c;
+        }
+    }
+    return received;
+}
+
+ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd) {
     uint8_t c[BUFFER_SIZE];
     ssize_t received = 0;
     ssize_t index = 0;
     ssize_t received_packet_len = -1;
 
     do {
-        received_packet_len = recvfrom(fd, &c[index], BUFFER_SIZE, 0, (struct sockaddr *) remote_endpoint, &sock_size);
-        if (received_packet_len == -1) {
+        memset(c,'\000',BUFFER_SIZE);
+        received_packet_len = recv(fd, c, len, 0);
+        if (received_packet_len == -1 && errno != EAGAIN) {
             coap_log(LOG_ERR,
                      "%s: read AF_UNIX socket failed: %s (%d)\n",
                      "coap_network_read",
                      coap_socket_strerror(), errno);
         }
-        for (int i = 0; i < received_packet_len; i++) {
+        for (int index = 0; index < received_packet_len; index++) {
 
             switch (c[index]) {
 
                 case SLIP_END:
                     if (received) {
-
-                        remote_endpoint->size = sock_size;
-                        remote_endpoint->addr.su.sun_family = AF_UNIX;
                         return received;
                     } else
                         break;
@@ -231,9 +262,8 @@ ssize_t recv_packet(uint8_t *p, size_t len, int fd, coap_address_t *remote_endpo
                     } else {
                         index = 0;
                         memset(&c, 0, UINT16_MAX);
-                        received_packet_len = recvfrom(fd, c, UINT16_MAX, 0, (struct sockaddr *) remote_endpoint,
-                                                       &sock_size);
-                        if (received_packet_len == -1) {
+                        received_packet_len = recv(fd, c, len, 0);
+                        if (received_packet_len == -1 && errno != EAGAIN) {
                             coap_log(LOG_ERR,
                                      "%s: read AF_UNIX socket failed or wrong SLIP protocol: %s (%d)\n",
                                      "coap_network_read",
@@ -253,14 +283,11 @@ ssize_t recv_packet(uint8_t *p, size_t len, int fd, coap_address_t *remote_endpo
                     }
 
                 default:
-                    if (received < len)
-                        p[received++] = c[index];
+                    p[received++] = c[index];
+
             }
-            index++;
         }
     } while (received_packet_len > 0);
-    remote_endpoint->size = sock_size;
-    remote_endpoint->addr.su.sun_family = AF_UNIX;
     return received;
 }
 
@@ -630,6 +657,7 @@ coap_socket_read(coap_socket_t *sock, uint8_t *data, size_t data_len) {
 #ifdef _WIN32
     r = recv(sock->fd, (char *)data, (int)data_len, 0);
 #else
+    //r = slip_recv_packet(data, data_len, sock->fd);
     r = recv(sock->fd, data, data_len, 0);
 #endif
     if (r == 0) {
@@ -717,7 +745,7 @@ static __declspec(thread) LPFN_WSARECVMSG lpWSARecvMsg = NULL;
 ssize_t
 coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint8_t *data, size_t datalen) {
     ssize_t bytes_written = 0;
-    /*uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
+    uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
     ssize_t packet_index = 0;
     memset(&ip_packet, '\000', datalen + IP_HDR_SIZE_VER6);
 
@@ -750,40 +778,19 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
             break;
 
     }
-
-    memcpy(&ip_packet[packet_index], &data, sizeof(data));*/
+    memcpy(&ip_packet[packet_index], data, datalen);
 
     // To ensure that the control data of the slip protocol fits into the slip_packet.
-    //uint8_t slip_packet[(datalen + packet_index) * 4];
-    //memset(slip_packet,'\000',(datalen + packet_index) * 4);
-    //ssize_t slip_packet_len = send_packet(slip_packet, ip_packet, datalen + packet_index);
+    uint8_t slip_packet[(datalen + packet_index) * 3];
+    memset(slip_packet, '\000', (datalen + packet_index) * 3);
+    ssize_t slip_packet_len = slip_proto(slip_packet, ip_packet, datalen + packet_index);
 
     if (!coap_debug_send_packet()) {
-        bytes_written = (ssize_t) datalen;
+        bytes_written = slip_packet_len;
     } else {
-        //bytes_written = sendto(sock->fd, ip_packet/*slip_packet*/, datalen + packet_index/*slip_packet_len*/, 0,
-        //(const struct sockaddr *) &sock->remote_endpoint.addr.su,
-        //sizeof(struct sockaddr_un));
-        bytes_written = sendto(sock->fd, data, datalen, 0,
+        bytes_written = sendto(sock->fd, slip_packet, slip_packet_len, 0,
                                (const struct sockaddr *) &sock->remote_endpoint.addr.su,
                                sizeof(struct sockaddr_un));
-        //bytes_written = write(sock->fd,data,datalen);
-        //////////////
-        FILE *fPtr;
-        char path[40];
-        snprintf(path, 40, "coap_network_send%d.txt", getpid());
-        fPtr = fopen(path, "w");
-        if (fPtr == NULL) {
-            printf("Unable to create file.\n");
-            exit(EXIT_FAILURE);
-        }
-        fputs((const char *) data, fPtr);
-        fputs((const char *) "  to: ", fPtr);
-        fputs((const char *) sock->remote_endpoint.addr.su.sun_path, fPtr);
-        fclose(fPtr);
-        printf("File created and saved successfully. :) \n");
-        /////////////
-        perror("send error: ");
     }
     return bytes_written;
 }
@@ -800,41 +807,6 @@ coap_packet_get_memmapped(coap_packet_t *packet, unsigned char **address, size_t
 
 #ifndef RIOT_VERSION
 
-/*ssize_t recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
-    uint8_t c;
-    int received = 0;
-    for (int i = 0; i < len; i++) {
-        c = data[i];
-        switch (c) {
-            case SLIP_END:
-                if (received)
-                    return received;
-                else
-                    break;
-                case SLIP_ESC:
-                    assert(i + 1 < len);
-                    i++;
-                    c = data[i];
-                    switch (c) {
-                        case SLIP_ESC_END:
-                            c = SLIP_END;
-                            break;
-                            case SLIP_ESC_ESC:
-                                c = SLIP_ESC;
-                                break;
-                                default:
-                                    return -1;
-                    }
-                    default:
-                        if (received < len)
-                            p[received++] = c;
-        }
-    }
-    return received;
-}*/
-
-#include <arpa/inet.h>
-
 ssize_t
 coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     assert(sock);
@@ -842,25 +814,25 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
     uint8_t buffer[BUFFER_SIZE];
     uint8_t ip_packet[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE - 1);
-    memset(ip_packet, 0, BUFFER_SIZE - 1);
+    memset(buffer, 0, BUFFER_SIZE);
+    memset(ip_packet, 0, BUFFER_SIZE);
     ssize_t len = -1;
     ssize_t payload_len = -1;
     ssize_t hdr_len = -1;
     uint16_t port;
-    uint16_t port2;
     uint32_t ip_address;
 
-    perror("connection error: ");
     socklen_t sock_size = sizeof(struct sockaddr_un);
     memset(&sock->remote_endpoint, 0, sizeof(coap_address_t));
-    //len = recv_packet(ip_packet, BUFFER_SIZE, sock->fd, &sock->remote_endpoint, sock_size);
-    len = recvfrom(sock->fd, &ip_packet, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
+    len = recvfrom(sock->fd, ip_packet, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
+    uint8_t slip_packet[len];
+    memset(slip_packet, 0, len);
+    len = recv_packet(slip_packet, ip_packet, len);
+
     char path[108];
-    memset(path,0,108);
+    memset(path, 0, 108);
     snprintf(path, 108, "/tmp%s", sock->remote_endpoint.addr.su.sun_path);
-    memcpy(&sock->remote_endpoint.addr.su.sun_path,&path,108);
-    perror("connection error: ");
+    memcpy(sock->remote_endpoint.addr.su.sun_path, path, 108);
     if (len == -1) {
         coap_log(LOG_ERR,
                  "%s: read AF_UNIX socket failed: %s (%d)\n",
@@ -870,59 +842,15 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     sock->remote_endpoint.addr.su.sun_family = AF_UNIX;
     socklen_t socklen = sizeof(struct sockaddr_un);
     sock->remote_endpoint.size = socklen;
-
-
+    packet->ifindex = sock->fd;
     buffer[BUFFER_SIZE - 1] = '\000';
+
     coap_log(LOG_DEBUG, "coap_network_read: read got %zd bytes\n", len);
 
-    packet->ifindex = sock->fd;
-//////////////
-    port = 5685;
-    port2 = 5686;
-    packet->addr_info.remote.size = sizeof(struct sockaddr_in);
-    packet->addr_info.local.size = sizeof(struct sockaddr_in);
-    packet->addr_info.remote.addr.sin.sin_family = AF_INET;
-    packet->addr_info.local.addr.sin.sin_family = AF_INET;
-    packet->addr_info.remote.addr.sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-    packet->addr_info.local.addr.sin.sin_addr.s_addr = inet_addr("127.0.0.1");
-    packet->addr_info.remote.addr.sin.sin_port = htons(port);
-    packet->addr_info.local.addr.sin.sin_port = htons(port2);
-    if (len > COAP_RXBUFFER_SIZE) {
-        coap_log(LOG_WARNING, "packet exceeds buffer size, truncated\n");
-        len = COAP_RXBUFFER_SIZE;
-    }
-    if (len >= 0) {
-        packet->length = (len > 0) ? len : 0; //TODO Springt er heir rein, weil
-        memset(packet->payload, '\000', COAP_RXBUFFER_SIZE);
-        memcpy(packet->payload, &ip_packet, len);
-        //////////////
-        FILE *fPtr;
-        char path[] = "PAYLOAD.txt";
-        char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-        fPtr = fopen(path, "w");
-        if (fPtr == NULL) {
-            printf("Unable to create file.\n");
-            exit(EXIT_FAILURE);
-        }
-        fputs((const char *) packet->payload, fPtr);
-        fclose(fPtr);
-        printf("File created and saved successfully. :) \n");
-        /////////////
-        if (LOG_DEBUG <= coap_get_log_level()) {
-            unsigned char addr_str[INET6_ADDRSTRLEN + 8];
-
-            if (coap_print_addr(&packet->addr_info.remote, addr_str, INET6_ADDRSTRLEN + 8)) {
-                coap_log(LOG_DEBUG, "received %zd bytes from %s\n", len, addr_str);
-            }
-        }
-    }
-    return len;
-    /////////////
-    /*switch (ip_packet[0]) {
+    switch (slip_packet[0]) {
         case IP_HDR_VER4:
             hdr_len = IP_HDR_SIZE_VER4;
-            payload_len = len - hdr_len < -1 ? -1 : len - hdr_len;
+            payload_len = (len - hdr_len) < -1 ? -1 : len - hdr_len;
             if (payload_len < 0) {
                 coap_log(LOG_ERR,
                          "%s: receive header for ipv4 failed: %s (%d)\n",
@@ -935,13 +863,13 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in);
             packet->addr_info.remote.addr.sin.sin_family = AF_INET;
             packet->addr_info.local.addr.sin.sin_family = AF_INET;
-            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
+            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
             memcpy(&packet->addr_info.remote.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
+            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
             memcpy(&packet->addr_info.local.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
+            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
             packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
+            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
             packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
 
@@ -959,13 +887,13 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in6);
             packet->addr_info.remote.addr.sin6.sin6_family = AF_INET6;
             packet->addr_info.local.addr.sin6.sin6_family = AF_INET6;
-            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
+            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
                    sizeof(uint8_t) * 16);
-            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
+            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
                    sizeof(uint8_t) * 16);
-            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
+            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
             packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
+            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
             packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
 
@@ -976,89 +904,23 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
                      coap_socket_strerror(), errno);
             break;
     }
-
     if (payload_len > COAP_RXBUFFER_SIZE) {
         coap_log(LOG_WARNING, "packet exceeds buffer size, truncated\n");
         payload_len = COAP_RXBUFFER_SIZE;
     }
-    if (payload_len >= 0 || hdr_len >= 0) {
-        packet->length = (payload_len > 0) ? payload_len : 0; //TODO Springt er heir rein, weil
+    if (payload_len >= 0) {
+        packet->length = (payload_len > 0) ? payload_len : 0;
         memset(packet->payload, '\000', COAP_RXBUFFER_SIZE);
-        memcpy(packet->payload, &ip_packet[hdr_len], payload_len);
+        memcpy(packet->payload, &slip_packet[hdr_len], payload_len);
         if (LOG_DEBUG <= coap_get_log_level()) {
             unsigned char addr_str[INET6_ADDRSTRLEN + 8];
 
             if (coap_print_addr(&packet->addr_info.remote, addr_str, INET6_ADDRSTRLEN + 8)) {
-                coap_log(LOG_DEBUG, "received %zd bytes from %s\n", len, addr_str);
+                coap_log(LOG_DEBUG, "received %zd bytes from %s\n", payload_len, addr_str);
             }
         }
-    }*/
-
-    /*snprintf(path, 40, "coap_outputile_test%d.txt", getpid());
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
     }
-    fputs((const char *) ip_packet, fPtr);*/
-    /*char temp_string[20];
-    memset(temp_string, 0, 20);
-    sprintf(temp_string, "%zu", len);
-    fputs((const char *) "len: ", fPtr);
-    fputs((const char *) temp_string, fPtr);
-    fputs((const char *) "   payload_len: ", fPtr);
-    memset(temp_string, 0, 20);
-    sprintf(temp_string, "%zu", payload_len);
-    fputs((const char *) temp_string, fPtr);
-    if (payload_len == 1 || payload_len == 18446744073709551615ul) {
-
-        memset(temp_string, 0, 20);
-        sprintf(temp_string, "%zu", hdr_len);
-        fputs((const char *) "   hdr_len: ", fPtr);
-        fputs((const char *) temp_string, fPtr);
-        ssize_t test = len - hdr_len;
-        memset(temp_string, 0, 20);
-        sprintf(temp_string, "%zu", test);
-        fputs((const char *) "   len - hdr_len: ", fPtr);
-        fputs((const char *) temp_string, fPtr);
-    }*/
-    //fclose(fPtr);
-    /*ssize_t buffer_size = 1000;
-    printf("File created and saved successfully. :) \n");
-    char source[buffer_size + 1];
-    memset(source, 0, buffer_size + 1);
-
-    FILE *fp = fopen("coap_outputile.txt", "r");
-    if (fp != NULL) {
-        size_t newLen = fread(source, sizeof(char), buffer_size, fp);
-        if (ferror(fp) != 0) {
-            fputs("Error reading file", stderr);
-        } else {
-            source[newLen++] = '\0'; /* Just to be safe.
-        }
-
-        fclose(fp);
-    }
-    for (int i = 0; i < 1000; i++) {
-        char c = source[i];
-        printf("%c ", c);
-    }
-    printf("\n");*/
-    /*perror("connection error: ");
-    char paths[108];
-    snprintf(paths, sizeof(sock->remote_endpoint.addr.su.sun_path),
-             "/tmp%s", sock->remote_endpoint.addr.su.sun_path);
-    memcpy(&sock->remote_endpoint.addr.su.sun_path,paths,108);
-    size_t n = sendto(sock->fd, ip_packet, len, 0,
-                      (const struct sockaddr *) &sock->remote_endpoint.addr.su,
-                      sizeof(struct sockaddr_un));
-    if (n < 0) {
-
-        coap_log(LOG_DEBUG, "coap_network_read: send failed\n");
-    }
-    perror("connection error: ");
-    ///////
-    return payload_len;*/
+    return payload_len;
 
 }
 

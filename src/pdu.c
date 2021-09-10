@@ -985,7 +985,6 @@ coap_pdu_parse_opt(coap_pdu_t *pdu) {
 
   if (pdu->token_length > pdu->used_size || pdu->token_length > 8) {
     coap_log(LOG_DEBUG, "coap_pdu_parse: invalid Token\n");
-      coap_log(LOG_DEBUG, "pdu.c Zeile 975 coap_pdu_parse_opt\n"); //TODO
     return 0;
   }
 

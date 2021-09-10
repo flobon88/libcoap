@@ -27,7 +27,7 @@
 
 #include <lwip/ip_addr.h>
 
-typedef struct coap_address_t { //TODO Anpassen
+typedef struct coap_address_t {
   uint16_t port;
   ip_addr_t addr;
 } coap_address_t;
@@ -56,7 +56,7 @@ coap_address_set_port(coap_address_t *addr, uint16_t port) {
 
 #define _coap_is_mcast_impl(Address) ip_addr_ismulticast(&(Address)->addr)
 
-#elif defined(WITH_CONTIKI) //TODO Anpassen
+#elif defined(WITH_CONTIKI)
 
 #include "uip.h"
 

@@ -420,42 +420,54 @@ get_context(const char *node, const char *port) {
       coap_free_context(ctx);
       return NULL;
     }*/
-    coap_address_t addr, addrs;
+    coap_address_t addr_udp, addr_dtls, addr_tcp, addr_tls;
     coap_endpoint_t *ep_udp = NULL, *ep_dtls = NULL;
-    coap_address_init(&addr);
-    addr.size = (socklen_t) strlen(node);
-    addr.addr.su.sun_family = AF_UNIX;
-    memcpy(&addr.addr.su.sun_path, node, addr.size);
-    ep_udp = coap_new_endpoint(ctx, &addr, COAP_PROTO_UDP);
+    coap_address_init(&addr_udp);
+    coap_address_init(&addr_dtls);
+    coap_address_init(&addr_tcp);
+    coap_address_init(&addr_tls);
+    snprintf(addr_udp.addr.su.sun_path, 108, "%s_udp", node);
+    addr_udp.size = (socklen_t) strlen(addr_udp.addr.su.sun_path);
+    addr_udp.addr.su.sun_family = AF_UNIX;
+    snprintf(addr_dtls.addr.su.sun_path, 108, "%s_dtls", node);
+    addr_dtls.size = (socklen_t) strlen(addr_dtls.addr.su.sun_path);
+    addr_dtls.addr.su.sun_family = AF_UNIX;
+    snprintf(addr_tcp.addr.su.sun_path, 108, "%s_tcp", node);
+    addr_tcp.size = (socklen_t) strlen(addr_tcp.addr.su.sun_path);
+    addr_tcp.addr.su.sun_family = AF_UNIX;
+    snprintf(addr_tls.addr.su.sun_path, 108, "%s_tls", node);
+    addr_tls.size = (socklen_t) strlen(addr_tls.addr.su.sun_path);
+    addr_tls.addr.su.sun_family = AF_UNIX;
+    ep_udp = coap_new_endpoint(ctx, &addr_udp, COAP_PROTO_UDP);
     if (ep_udp) {
         if (coap_dtls_is_supported() && (key_defined)) {
-            ep_dtls = coap_new_endpoint(ctx, &addr, COAP_PROTO_DTLS);
+            ep_dtls = coap_new_endpoint(ctx, &addr_dtls, COAP_PROTO_DTLS);
             if (!ep_dtls)
                 coap_log(LOG_CRIT, "cannot create DTLS endpoint\n");
         }
     } else {
         coap_log(LOG_CRIT, "cannot create UDP endpoint\n");
     }
-    /*if (coap_tcp_is_supported()) {
+    if (coap_tcp_is_supported()) {
         coap_endpoint_t *ep_tcp;
-        ep_tcp = coap_new_endpoint(ctx, &addr, COAP_PROTO_TCP);
+        ep_tcp = coap_new_endpoint(ctx, &addr_tcp, COAP_PROTO_TCP);
         if (ep_tcp) {
             if (coap_tls_is_supported() && (key_defined)) {
                 coap_endpoint_t *ep_tls;
-                ep_tls = coap_new_endpoint(ctx, &addrs, COAP_PROTO_TLS);
+                ep_tls = coap_new_endpoint(ctx, &addr_tls, COAP_PROTO_TLS);
                 if (!ep_tls)
                     coap_log(LOG_CRIT, "cannot create TLS endpoint\n");
             }
         } else {
             coap_log(LOG_CRIT, "cannot create TCP endpoint\n");
         }
-    }*/
+    }
     if (ep_udp)
         goto finish;
 
 
     /* iterate through results until success */
-    for (rp = result; rp != NULL && 0; rp = rp->ai_next) {
+   /* for (rp = result; rp != NULL && 0; rp = rp->ai_next) {
         //coap_address_t addr, addrs;
         //coap_endpoint_t *ep_udp = NULL, *ep_dtls = NULL;
 
@@ -502,7 +514,7 @@ get_context(const char *node, const char *port) {
             if (ep_udp)
                 goto finish;
         }
-    }
+    }*/
 
     fprintf(stderr, "no context available for interface '%s'\n", node);
     coap_free_context(ctx);

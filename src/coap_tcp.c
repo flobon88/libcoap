@@ -242,6 +242,9 @@ coap_socket_bind_tcp(coap_socket_t *sock,
                coap_socket_strerror());
 #endif /* RIOT_VERSION */
     break;
+  case AF_UNIX:
+      unlink(listen_addr->addr.su.sun_path);
+      break;
   default:
     coap_log(LOG_ALERT, "coap_socket_bind_tcp: unsupported sa_family\n");
   }
@@ -249,6 +252,8 @@ coap_socket_bind_tcp(coap_socket_t *sock,
   if (bind(sock->fd, &listen_addr->addr.sa,
            listen_addr->addr.sa.sa_family == AF_INET ?
             (socklen_t)sizeof(struct sockaddr_in) :
+           listen_addr->addr.sa.sa_family == AF_UNIX ?
+           (socklen_t) sizeof(struct sockaddr_un) :
             (socklen_t)listen_addr->size) == COAP_SOCKET_ERROR) {
     coap_log(LOG_ALERT, "coap_socket_bind_tcp: bind: %s\n",
              coap_socket_strerror());

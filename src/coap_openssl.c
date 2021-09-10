@@ -704,7 +704,6 @@ static long coap_sock_ctrl(BIO *a, int cmd, long num, void *ptr) {
     }
     return r;
 }
-
 #endif /* !COAP_DISABLE_TCP */
 
 static void coap_set_user_prefs(SSL_CTX *ctx) {
@@ -2243,7 +2242,6 @@ error:
   return SSL_TLSEXT_ERR_ALERT_WARNING;
 }
 #else /* OPENSSL_VERSION_NUMBER >= 0x10101000L */
-
 /*
  * During the SSL/TLS initial negotiations, tls_client_hello_call_back() is
  * called early in the Client Hello processing so it is possible to determine
@@ -2572,20 +2570,6 @@ coap_dtls_context_set_pki(coap_context_t *ctx,
                           const coap_dtls_pki_t *setup_data,
                           const coap_dtls_role_t role
 ) {
-    //////////////
-    FILE *fPtr;
-    char path[] = "coap_dtls_context_set_pki.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) text, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     coap_openssl_context_t *context =
             ((coap_openssl_context_t *) ctx->dtls_context);
     BIO *bio;
@@ -2696,20 +2680,6 @@ coap_dtls_context_set_pki_root_cas(coap_context_t *ctx,
 ) {
     coap_openssl_context_t *context =
             ((coap_openssl_context_t *) ctx->dtls_context);
-    //////////////
-    FILE *fPtr;
-    char path[] = "coap_dtls_context_set_pki_root_cas.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) text, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     if (context->dtls.ctx) {
         if (!SSL_CTX_load_verify_locations(context->dtls.ctx, ca_file, ca_dir)) {
             coap_log(LOG_WARNING, "Unable to install root CAs (%s/%s)\n",
@@ -2777,20 +2747,6 @@ void coap_dtls_free_context(void *handle) {
 }
 
 void *coap_dtls_new_server_session(coap_session_t *session) {
-    //////////////
-    FILE *fPtr;
-    char path[] = "coap_dtls_new_server_session.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) text, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     BIO *nbio = NULL;
     SSL *nssl = NULL, *ssl = NULL;
     coap_ssl_data *data;
@@ -2922,20 +2878,6 @@ setup_client_ssl_session(coap_session_t *session, SSL *ssl
 }
 
 void *coap_dtls_new_client_session(coap_session_t *session) {
-    //////////////
-    FILE *fPtr;
-    char path[] = "coap_dtls_new_client_session.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) text, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     BIO *bio = NULL;
     SSL *ssl = NULL;
     coap_ssl_data *data;
@@ -3001,20 +2943,6 @@ void coap_dtls_free_session(coap_session_t *session) {
 
 int coap_dtls_send(coap_session_t *session,
                    const uint8_t *data, size_t data_len) {
-    //////////////
-    FILE *fPtr;
-    char path[] = "coap_dtls_send.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    fputs((const char *) text, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     int r;
     SSL *ssl = (SSL *) session->tls;
 
@@ -3085,24 +3013,6 @@ int coap_dtls_hello(coap_session_t *session,
     coap_dtls_context_t *dtls = &((coap_openssl_context_t *) session->context->dtls_context)->dtls;
     coap_ssl_data *ssl_data;
     int r;
-    //////////////
-    FILE *fPtr;
-    char path[] = "WAS_IST_IN_DATA.txt";
-    char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-    fPtr = fopen(path, "w");
-    if (fPtr == NULL) {
-        printf("Unable to create file.\n");
-        exit(EXIT_FAILURE);
-    }
-    char data_length[20];
-    fputs((const char *) data, fPtr);
-    sprintf(data_length, "%zu", data_len);
-    fputs((const char *) "  LEN:", fPtr);
-    fputs((const char *) data_length, fPtr);
-    fclose(fPtr);
-    printf("File created and saved successfully. :) \n");
-    /////////////
     SSL_set_mtu(dtls->ssl, (long) session->mtu);
     ssl_data = (coap_ssl_data *) BIO_get_data(SSL_get_rbio(dtls->ssl));
     assert(ssl_data != NULL);
@@ -3121,20 +3031,6 @@ int coap_dtls_hello(coap_session_t *session,
             r = 0;
         }
     } else {
-        //////////////
-        FILE *fPtr;
-        char path[] = "valid_answer_to_a_VerifyRequest.txt";
-        char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-        fPtr = fopen(path, "w");
-        if (fPtr == NULL) {
-            printf("Unable to create file.\n");
-            exit(EXIT_FAILURE);
-        }
-        fputs((const char *) text, fPtr);
-        fclose(fPtr);
-        printf("File created and saved successfully. :) \n");
-        /////////////
         /* Got a valid answer to a VerifyRequest */
         r = 1;
     }
@@ -3269,7 +3165,6 @@ unsigned int coap_dtls_get_overhead(coap_session_t *session) {
 }
 
 #if !COAP_DISABLE_TCP
-
 void *coap_tls_new_client_session(coap_session_t *session, int *connected) {
     BIO *bio = NULL;
     SSL *ssl = NULL;
@@ -3523,7 +3418,6 @@ ssize_t coap_tls_read(coap_session_t *session,
 
     return r;
 }
-
 #endif /* !COAP_DISABLE_TCP */
 
 coap_digest_ctx_t *
