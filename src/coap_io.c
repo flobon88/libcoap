@@ -16,21 +16,15 @@
 # include <sys/select.h>
 #endif
 #ifdef HAVE_SYS_SOCKET_H
-
 # include <sys/socket.h>
-
 # define OPTVAL_T(t)         (t)
 # define OPTVAL_GT(t)        (t)
 #endif
 #ifdef HAVE_SYS_IOCTL_H
-
-#include <sys/ioctl.h>
-
+ #include <sys/ioctl.h>
 #endif
 #ifdef HAVE_NETINET_IN_H
-
 # include <netinet/in.h>
-
 #endif
 #ifdef HAVE_WS2TCPIP_H
 #include <ws2tcpip.h>
@@ -43,20 +37,14 @@
 # include <sys/uio.h>
 #endif
 #ifdef HAVE_UNISTD_H
-
 # include <unistd.h>
-
 #endif
-
+#include <errno.h>
 #ifdef COAP_EPOLL_SUPPORT
-
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
-
 #ifdef HAVE_LIMITS_H
-
 #include <limits.h>
-
 #endif
 #endif /* COAP_EPOLL_SUPPORT */
 
@@ -65,7 +53,7 @@
 #endif
 
 #if !defined(WITH_CONTIKI) && !defined(RIOT_VERSION)
-/* define generic PKTINFO for IPv4 */
+ /* define generic PKTINFO for IPv4 */
 #if defined(IP_PKTINFO)
 #  define GEN_IP_PKTINFO IP_PKTINFO
 #elif defined(IP_RECVDSTADDR)
@@ -88,38 +76,38 @@
 static int ep_initialized = 0;
 
 coap_endpoint_t *
-coap_malloc_endpoint() {
-    static coap_endpoint_t ep;
+  coap_malloc_endpoint() {
+  static coap_endpoint_t ep;
 
-    if (ep_initialized) {
-        return NULL;
-    } else {
-        ep_initialized = 1;
-        return &ep;
-    }
+  if (ep_initialized) {
+    return NULL;
+  } else {
+    ep_initialized = 1;
+    return &ep;
+  }
 }
 
 void
 coap_mfree_endpoint(coap_endpoint_t *ep) {
-    ep_initialized = 0;
+  ep_initialized = 0;
 }
 
 int
 coap_socket_bind_udp(coap_socket_t *sock,
-                     const coap_address_t *listen_addr,
-                     coap_address_t *bound_addr) {
-    sock->conn = udp_new(NULL, 0, NULL);
+  const coap_address_t *listen_addr,
+  coap_address_t *bound_addr) {
+  sock->conn = udp_new(NULL, 0, NULL);
 
-    if (!sock->conn) {
-        coap_log(LOG_WARNING, "coap_socket_bind_udp");
-        return 0;
-    }
+  if (!sock->conn) {
+    coap_log(LOG_WARNING, "coap_socket_bind_udp");
+    return 0;
+  }
 
-    coap_address_init(bound_addr);
-    uip_ipaddr_copy(&bound_addr->addr, &listen_addr->addr);
-    bound_addr->port = listen_addr->port;
-    udp_bind((struct uip_udp_conn *)sock->conn, bound_addr->port);
-    return 1;
+  coap_address_init(bound_addr);
+  uip_ipaddr_copy(&bound_addr->addr, &listen_addr->addr);
+  bound_addr->port = listen_addr->port;
+  udp_bind((struct uip_udp_conn *)sock->conn, bound_addr->port);
+  return 1;
 }
 
 int
@@ -150,151 +138,9 @@ void coap_socket_close(coap_socket_t *sock) {
 
 #else
 
-#include "coap_config.h"
-#include <errno.h>
-#include <stdio.h>
-#include <arpa/inet.h>
-
-#define SLIP_END     ((uint8_t)0300)
-#define SLIP_ESC     ((uint8_t)0333)
-#define SLIP_ESC_END ((uint8_t)0334)
-#define SLIP_ESC_ESC ((uint8_t)0335)
-
-#define IP_HDR_VER4 ((uint8_t)0004)
-#define IP_HDR_VER6 ((uint8_t)0006)
-#define IP_HDR_INDEX_ADDR_REMOTE_VER4 ((ssize_t)1)
-#define IP_HDR_INDEX_ADDR_LOCAL_VER4 ((ssize_t)5)
-#define IP_HDR_INDEX_PORT_REMOTE_VER4 ((ssize_t)9)
-#define IP_HDR_INDEX_PORT_LOCAL_VER4 ((ssize_t)11)
-#define IP_HDR_SIZE_VER4 ((ssize_t)13)
-#define IP_HDR_INDEX_ADDR_REMOTE_VER6 ((ssize_t)1)
-#define IP_HDR_INDEX_ADDR_LOCAL_VER6 ((ssize_t)17)
-#define IP_HDR_INDEX_PORT_REMOTE_VER6 ((ssize_t)33)
-#define IP_HDR_INDEX_PORT_LOCAL_VER6 ((ssize_t)35)
-#define IP_HDR_SIZE_VER6 ((ssize_t)37)
-#define BUFFER_SIZE UINT16_MAX
-
-ssize_t slip_proto(uint8_t *p, const uint8_t *data, size_t len) {
-    ssize_t send = 0;
-    p[send++] = SLIP_END;
-
-    while (len--) {
-        switch (*data) {
-            case SLIP_END:
-                p[send++] = SLIP_ESC;
-                p[send++] = SLIP_ESC_END;
-                break;
-            case SLIP_ESC:
-                p[send++] = SLIP_ESC;
-                p[send++] = SLIP_ESC_ESC;
-                break;
-            default:
-                p[send++] = *data;
-        }
-
-        data++;
-    }
-    p[send++] = SLIP_END;
-    return send;
-}
-
-ssize_t recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
-    uint8_t c;
-    int received = 0;
-    for (int i = 0; i < len; i++) {
-        c = data[i];
-        switch (c) {
-            case SLIP_END:
-                if (received)
-                    return received;
-                else
-                    break;
-            case SLIP_ESC:
-                assert(i + 1 < len);
-                i++;
-                c = data[i];
-                switch (c) {
-                    case SLIP_ESC_END:
-                        c = SLIP_END;
-                        break;
-                    case SLIP_ESC_ESC:
-                        c = SLIP_ESC;
-                        break;
-                    default:
-                        return -1;
-                }
-            default:
-                if (received < len)
-                    p[received++] = c;
-        }
-    }
-    return received;
-}
-
-ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd) {
-    uint8_t c[BUFFER_SIZE];
-    ssize_t received = 0;
-    ssize_t index = 0;
-    ssize_t received_packet_len = -1;
-
-    do {
-        memset(c,'\000',BUFFER_SIZE);
-        received_packet_len = recv(fd, c, len, 0);
-        if (received_packet_len == -1 && errno != EAGAIN) {
-            coap_log(LOG_ERR,
-                     "%s: read AF_UNIX socket failed: %s (%d)\n",
-                     "coap_network_read",
-                     coap_socket_strerror(), errno);
-        }
-        for (int index = 0; index < received_packet_len; index++) {
-
-            switch (c[index]) {
-
-                case SLIP_END:
-                    if (received) {
-                        return received;
-                    } else
-                        break;
-
-                case SLIP_ESC:
-                    if (index + 1 < received_packet_len) {
-                        index++;
-                    } else {
-                        index = 0;
-                        memset(&c, 0, UINT16_MAX);
-                        received_packet_len = recv(fd, c, len, 0);
-                        if (received_packet_len == -1 && errno != EAGAIN) {
-                            coap_log(LOG_ERR,
-                                     "%s: read AF_UNIX socket failed or wrong SLIP protocol: %s (%d)\n",
-                                     "coap_network_read",
-                                     coap_socket_strerror(), errno);
-                        }
-
-                    }
-                    switch (c[index]) {
-                        case SLIP_ESC_END:
-                            c[index] = SLIP_END;
-                            break;
-                        case SLIP_ESC_ESC:
-                            c[index] = SLIP_ESC;
-                            break;
-                        default:
-                            return -1;
-                    }
-
-                default:
-                    p[received++] = c[index];
-
-            }
-        }
-    } while (received_packet_len > 0);
-    return received;
-}
-
-
 coap_endpoint_t *
 coap_malloc_endpoint(void) {
-    return (coap_endpoint_t *) coap_malloc_type(COAP_ENDPOINT, sizeof(coap_endpoint_t));
+  return (coap_endpoint_t *)coap_malloc_type(COAP_ENDPOINT, sizeof(coap_endpoint_t));
 }
 
 void
@@ -312,10 +158,6 @@ coap_socket_bind_udp(coap_socket_t *sock,
 #ifdef _WIN32
     u_long u_on = 1;
 #endif
-
-    if (listen_addr->addr.sa.sa_family == AF_UNIX) {
-        unlink(listen_addr->addr.su.sun_path);
-    }
 
     sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM, 0);
 
@@ -364,13 +206,6 @@ coap_socket_bind_udp(coap_socket_t *sock,
             /* ignore error, because likely cause is that IPv4 is disabled at the os
                level */
             break;
-        case AF_UNIX:
-            if (setsockopt(sock->fd, SOL_SOCKET, GEN_IP_PKTINFO, OPTVAL_T(&on), sizeof(on)) == COAP_SOCKET_ERROR) {
-                coap_log(LOG_ALERT,
-                         "coap_socket_bind_udp: setsockopt SO_PASSCRED: %s\n",
-                         coap_socket_strerror());
-            }
-            break;
         default:
             coap_log(LOG_ALERT, "coap_socket_bind_udp: unsupported sa_family\n");
             break;
@@ -379,17 +214,14 @@ coap_socket_bind_udp(coap_socket_t *sock,
 
     if (bind(sock->fd, &listen_addr->addr.sa,
              listen_addr->addr.sa.sa_family == AF_INET ?
-             (socklen_t) sizeof(struct sockaddr_in) :
-             listen_addr->addr.sa.sa_family == AF_UNIX ?
-             (socklen_t) sizeof(struct sockaddr_un) :
-             (socklen_t) listen_addr->size) == COAP_SOCKET_ERROR) {
+            (socklen_t)sizeof(struct sockaddr_in) :
+            (socklen_t)listen_addr->size) == COAP_SOCKET_ERROR) {
         coap_log(LOG_WARNING, "coap_socket_bind_udp: bind: %s\n",
                  coap_socket_strerror());
         goto error;
     }
 
-    bound_addr->size = (socklen_t)
-            sizeof(*bound_addr);
+  bound_addr->size = (socklen_t)sizeof(*bound_addr);
     if (getsockname(sock->fd, &bound_addr->addr.sa, &bound_addr->size) < 0) {
         coap_log(LOG_WARNING,
                  "coap_socket_bind_udp: getsockname: %s\n",
@@ -458,10 +290,6 @@ coap_socket_connect_udp(coap_socket_t *sock,
                          coap_socket_strerror());
 #endif /* RIOT_VERSION */
             break;
-        case AF_UNIX:
-            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,
-                    sizeof(connect_addr.addr.su.sun_path) - 1);
-            //connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
         default:
             coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
             break;
@@ -476,10 +304,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
         if (bind(sock->fd, &local_if->addr.sa,
                  local_if->addr.sa.sa_family == AF_INET ?
-                 (socklen_t) sizeof(struct sockaddr_in) :
-                 local_if->addr.sa.sa_family == AF_UNIX ?
-                 (socklen_t) sizeof(struct sockaddr_un) :
-                 (socklen_t) local_if->size) == COAP_SOCKET_ERROR) {
+              (socklen_t)sizeof(struct sockaddr_in) :
+              (socklen_t)local_if->size) == COAP_SOCKET_ERROR) {
             coap_log(LOG_WARNING, "coap_socket_connect_udp: bind: %s\n",
                      coap_socket_strerror());
             goto error;
@@ -496,8 +322,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
             bind_addr.addr.sa.sa_family = connect_addr.addr.sa.sa_family;
             if (bind(sock->fd, &bind_addr.addr.sa,
                      bind_addr.addr.sa.sa_family == AF_INET ?
-                     (socklen_t) sizeof(struct sockaddr_in) :
-                     (socklen_t) bind_addr.size) == COAP_SOCKET_ERROR) {
+                (socklen_t)sizeof(struct sockaddr_in) :
+                (socklen_t)bind_addr.size) == COAP_SOCKET_ERROR) {
                 coap_log(LOG_WARNING, "coap_socket_connect_udp: bind: %s\n",
                          coap_socket_strerror());
                 goto error;
@@ -565,7 +391,6 @@ void coap_socket_close(coap_socket_t *sock) {
 }
 
 #ifdef COAP_EPOLL_SUPPORT
-
 void
 coap_epoll_ctl_mod(coap_socket_t *sock,
                    uint32_t events,
@@ -594,7 +419,6 @@ coap_epoll_ctl_mod(coap_socket_t *sock,
                  coap_socket_strerror(), errno);
     }
 }
-
 #endif /* COAP_EPOLL_SUPPORT */
 
 ssize_t
@@ -613,7 +437,7 @@ coap_socket_write(coap_socket_t *sock, const uint8_t *data, size_t data_len) {
 #elif EAGAIN != EWOULDBLOCK
         if (errno==EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
 #else
-        if (errno == EAGAIN || errno == EINTR) {
+    if (errno==EAGAIN || errno == EINTR) {
 #endif
             sock->flags |= COAP_SOCKET_WANT_WRITE;
 #ifdef COAP_EPOLL_SUPPORT
@@ -628,13 +452,14 @@ coap_socket_write(coap_socket_t *sock, const uint8_t *data, size_t data_len) {
         if (errno == EPIPE || errno == ECONNRESET) {
             coap_log(LOG_INFO, "coap_socket_write: send: %s\n",
                      coap_socket_strerror());
-        } else {
+    }
+    else {
             coap_log(LOG_WARNING, "coap_socket_write: send: %s\n",
                      coap_socket_strerror());
         }
         return -1;
     }
-    if (r < (ssize_t) data_len) {
+  if (r < (ssize_t)data_len) {
         sock->flags |= COAP_SOCKET_WANT_WRITE;
 #ifdef COAP_EPOLL_SUPPORT
         coap_epoll_ctl_mod(sock,
@@ -657,7 +482,6 @@ coap_socket_read(coap_socket_t *sock, uint8_t *data, size_t data_len) {
 #ifdef _WIN32
     r = recv(sock->fd, (char *)data, (int)data_len, 0);
 #else
-    //r = slip_recv_packet(data, data_len, sock->fd);
     r = recv(sock->fd, data, data_len, 0);
 #endif
     if (r == 0) {
@@ -672,7 +496,7 @@ coap_socket_read(coap_socket_t *sock, uint8_t *data, size_t data_len) {
 #elif EAGAIN != EWOULDBLOCK
         if (errno==EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
 #else
-        if (errno == EAGAIN || errno == EINTR) {
+    if (errno==EAGAIN || errno == EINTR) {
 #endif
             return 0;
         }
@@ -685,14 +509,14 @@ coap_socket_read(coap_socket_t *sock, uint8_t *data, size_t data_len) {
                      coap_socket_strerror());
         return -1;
     }
-    if (r < (ssize_t) data_len)
+  if (r < (ssize_t)data_len)
         sock->flags &= ~COAP_SOCKET_CAN_READ;
     return r;
 }
 
 #endif  /* WITH_CONTIKI */
 
-#if (!defined(WITH_CONTIKI)) != (defined(HAVE_NETINET_IN_H) || defined(HAVE_WS2TCPIP_H))
+#if (!defined(WITH_CONTIKI)) != ( defined(HAVE_NETINET_IN_H) || defined(HAVE_WS2TCPIP_H) )
 /* define struct in6_pktinfo and struct in_pktinfo if not available
    FIXME: check with configure
 */
@@ -741,60 +565,176 @@ static __declspec(thread) LPFN_WSARECVMSG lpWSARecvMsg = NULL;
 #endif
 
 #ifndef RIOT_VERSION
-
 ssize_t
 coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint8_t *data, size_t datalen) {
     ssize_t bytes_written = 0;
-    uint8_t ip_packet[datalen + IP_HDR_SIZE_VER6];
-    ssize_t packet_index = 0;
-    memset(&ip_packet, '\000', datalen + IP_HDR_SIZE_VER6);
 
-    switch (session->addr_info.remote.addr.sa.sa_family) {
+  if (!coap_debug_send_packet()) {
+    bytes_written = (ssize_t)datalen;
+#ifndef WITH_CONTIKI
+  } else if (sock->flags & COAP_SOCKET_CONNECTED) {
+#ifdef _WIN32
+    bytes_written = send(sock->fd, (const char *)data, (int)datalen, 0);
+#else
+    bytes_written = send(sock->fd, data, datalen, 0);
+#endif
+#endif
+  } else {
+#ifdef _WIN32
+    DWORD dwNumberOfBytesSent = 0;
+    int r;
+#endif
+#ifdef HAVE_STRUCT_CMSGHDR
+    /* a buffer large enough to hold all packet info types, ipv6 is the largest */
+    char buf[CMSG_SPACE(sizeof(struct in6_pktinfo))];
+    struct msghdr mhdr;
+    struct iovec iov[1];
+    const void *addr = &session->addr_info.remote.addr;
 
+    assert(session);
+
+    memcpy (&iov[0].iov_base, &data, sizeof (iov[0].iov_base));
+    iov[0].iov_len = (iov_len_t)datalen;
+
+    memset(buf, 0, sizeof (buf));
+
+    memset(&mhdr, 0, sizeof(struct msghdr));
+    memcpy (&mhdr.msg_name, &addr, sizeof (mhdr.msg_name));
+    mhdr.msg_namelen = session->addr_info.remote.size;
+
+    mhdr.msg_iov = iov;
+    mhdr.msg_iovlen = 1;
+
+    if (!coap_address_isany(&session->addr_info.local) &&
+        !coap_is_mcast(&session->addr_info.local))
+    switch (session->addr_info.local.addr.sa.sa_family) {
+    case AF_INET6:
+    {
+      struct cmsghdr *cmsg;
+
+      if (IN6_IS_ADDR_V4MAPPED(&session->addr_info.local.addr.sin6.sin6_addr)) {
+#if defined(IP_PKTINFO)
+        struct in_pktinfo *pktinfo;
+        mhdr.msg_control = buf;
+        mhdr.msg_controllen = CMSG_SPACE(sizeof(struct in_pktinfo));
+
+        cmsg = CMSG_FIRSTHDR(&mhdr);
+        cmsg->cmsg_level = SOL_IP;
+        cmsg->cmsg_type = IP_PKTINFO;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
+
+        pktinfo = (struct in_pktinfo *)CMSG_DATA(cmsg);
+
+        pktinfo->ipi_ifindex = session->ifindex;
+        memcpy(&pktinfo->ipi_spec_dst,
+               session->addr_info.local.addr.sin6.sin6_addr.s6_addr + 12,
+               sizeof(pktinfo->ipi_spec_dst));
+#elif defined(IP_SENDSRCADDR)
+        mhdr.msg_control = buf;
+        mhdr.msg_controllen = CMSG_SPACE(sizeof(struct in_addr));
+
+        cmsg = CMSG_FIRSTHDR(&mhdr);
+        cmsg->cmsg_level = IPPROTO_IP;
+        cmsg->cmsg_type = IP_SENDSRCADDR;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_addr));
+
+        memcpy(CMSG_DATA(cmsg),
+               session->addr_info.local.addr.sin6.sin6_addr.s6_addr + 12,
+               sizeof(struct in_addr));
+#endif /* IP_PKTINFO */
+      } else {
+        struct in6_pktinfo *pktinfo;
+        mhdr.msg_control = buf;
+        mhdr.msg_controllen = CMSG_SPACE(sizeof(struct in6_pktinfo));
+
+        cmsg = CMSG_FIRSTHDR(&mhdr);
+        cmsg->cmsg_level = IPPROTO_IPV6;
+        cmsg->cmsg_type = IPV6_PKTINFO;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
+
+        pktinfo = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+
+        pktinfo->ipi6_ifindex = session->ifindex;
+        memcpy(&pktinfo->ipi6_addr,
+               &session->addr_info.local.addr.sin6.sin6_addr,
+               sizeof(pktinfo->ipi6_addr));
+      }
+      break;
+    }
         case AF_INET:
-            ip_packet[0] = IP_HDR_VER4;
-            packet_index = IP_HDR_SIZE_VER4;
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_port,
-                   sizeof(in_port_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_port,
-                   sizeof(in_port_t));
+    {
+#if defined(IP_PKTINFO)
+      struct cmsghdr *cmsg;
+      struct in_pktinfo *pktinfo;
+
+      mhdr.msg_control = buf;
+      mhdr.msg_controllen = CMSG_SPACE(sizeof(struct in_pktinfo));
+
+      cmsg = CMSG_FIRSTHDR(&mhdr);
+      cmsg->cmsg_level = SOL_IP;
+      cmsg->cmsg_type = IP_PKTINFO;
+      cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
+
+      pktinfo = (struct in_pktinfo *)CMSG_DATA(cmsg);
+
+      pktinfo->ipi_ifindex = session->ifindex;
+      memcpy(&pktinfo->ipi_spec_dst,
+             &session->addr_info.local.addr.sin.sin_addr,
+             sizeof(pktinfo->ipi_spec_dst));
+#elif defined(IP_SENDSRCADDR)
+      struct cmsghdr *cmsg;
+      mhdr.msg_control = buf;
+      mhdr.msg_controllen = CMSG_SPACE(sizeof(struct in_addr));
+
+      cmsg = CMSG_FIRSTHDR(&mhdr);
+      cmsg->cmsg_level = IPPROTO_IP;
+      cmsg->cmsg_type = IP_SENDSRCADDR;
+      cmsg->cmsg_len = CMSG_LEN(sizeof(struct in_addr));
+
+      memcpy(CMSG_DATA(cmsg),
+             &session->addr_info.local.addr.sin.sin_addr,
+             sizeof(struct in_addr));
+#endif /* IP_PKTINFO */
             break;
-
-        case AF_INET6:
-            ip_packet[0] = IP_HDR_VER6;
-            packet_index = IP_HDR_SIZE_VER6;
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6], &session->addr_info.remote.addr.sin6.sin6_addr,
-                   sizeof(uint8_t) * 16);
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6], &session->addr_info.local.addr.sin6.sin6_addr,
-                   sizeof(uint8_t) * 16);
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], &session->addr_info.remote.addr.sin6.sin6_port,
-                   sizeof(in_port_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], &session->addr_info.local.addr.sin6.sin6_port,
-                   sizeof(in_port_t));
-            break;
-
     }
-    memcpy(&ip_packet[packet_index], data, datalen);
-
-    // To ensure that the control data of the slip protocol fits into the slip_packet.
-    uint8_t slip_packet[(datalen + packet_index) * 3];
-    memset(slip_packet, '\000', (datalen + packet_index) * 3);
-    ssize_t slip_packet_len = slip_proto(slip_packet, ip_packet, datalen + packet_index);
-
-    if (!coap_debug_send_packet()) {
-        bytes_written = slip_packet_len;
-    } else {
-        bytes_written = sendto(sock->fd, slip_packet, slip_packet_len, 0,
-                               (const struct sockaddr *) &sock->remote_endpoint.addr.su,
-                               sizeof(struct sockaddr_un));
+    default:
+      /* error */
+      coap_log(LOG_WARNING, "protocol not supported\n");
+      bytes_written = -1;
     }
+#endif /* HAVE_STRUCT_CMSGHDR */
+
+#ifdef _WIN32
+    r = WSASendMsg(sock->fd, &mhdr, 0 /*dwFlags*/, &dwNumberOfBytesSent, NULL /*lpOverlapped*/, NULL /*lpCompletionRoutine*/);
+    if (r == 0)
+      bytes_written = (ssize_t)dwNumberOfBytesSent;
+    else
+      bytes_written = -1;
+#else
+#ifdef HAVE_STRUCT_CMSGHDR
+    bytes_written = sendmsg(sock->fd, &mhdr, 0);
+#elif !defined(CONTIKI) /* ! HAVE_STRUCT_CMSGHDR */
+    bytes_written = sendto(sock->fd, data, datalen, 0,
+                           &session->addr_info.remote.addr.sa,
+                           session->addr_info.remote.size);
+#endif /* ! HAVE_STRUCT_CMSGHDR */
+#endif
+#if defined(WITH_CONTIKI)
+    /* FIXME: untested */
+    /* FIXME: is there a way to check if send was successful? */
+    (void)datalen;
+    (void)data;
+    uip_udp_packet_sendto((struct uip_udp_conn *)sock->conn, data, datalen,
+      &session->addr_info.remote.addr, session->addr_info.remote.port);
+    bytes_written = datalen;
+#endif /* WITH_CONTIKI */
+    }
+
+  if (bytes_written < 0)
+    coap_log(LOG_CRIT, "coap_network_send: %s\n", coap_socket_strerror());
+
     return bytes_written;
 }
-
 #endif /* RIOT_VERSION */
 
 #define SIN6(A) ((struct sockaddr_in6 *)(A))
@@ -806,124 +746,257 @@ coap_packet_get_memmapped(coap_packet_t *packet, unsigned char **address, size_t
 }
 
 #ifndef RIOT_VERSION
-
 ssize_t
 coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
+  ssize_t len = -1;
+
     assert(sock);
     assert(packet);
 
-    uint8_t buffer[BUFFER_SIZE];
-    uint8_t ip_packet[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);
-    memset(ip_packet, 0, BUFFER_SIZE);
-    ssize_t len = -1;
-    ssize_t payload_len = -1;
-    ssize_t hdr_len = -1;
-    uint16_t port;
-    uint32_t ip_address;
+  if ((sock->flags & COAP_SOCKET_CAN_READ) == 0) {
+    return -1;
+  } else {
+    /* clear has-data flag */
+    sock->flags &= ~COAP_SOCKET_CAN_READ;
+  }
 
-    socklen_t sock_size = sizeof(struct sockaddr_un);
-    memset(&sock->remote_endpoint, 0, sizeof(coap_address_t));
-    len = recvfrom(sock->fd, ip_packet, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
-    uint8_t slip_packet[len];
-    memset(slip_packet, 0, len);
-    len = recv_packet(slip_packet, ip_packet, len);
-
-    char path[108];
-    memset(path, 0, 108);
-    snprintf(path, 108, "/tmp%s", sock->remote_endpoint.addr.su.sun_path);
-    memcpy(sock->remote_endpoint.addr.su.sun_path, path, 108);
-    if (len == -1) {
-        coap_log(LOG_ERR,
-                 "%s: read AF_UNIX socket failed: %s (%d)\n",
-                 "coap_network_read",
-                 coap_socket_strerror(), errno);
+#if !defined(WITH_CONTIKI) && !defined(RIOT_VERSION)
+  if (sock->flags & COAP_SOCKET_CONNECTED) {
+#ifdef _WIN32
+    len = recv(sock->fd, (char *)packet->payload, COAP_RXBUFFER_SIZE, 0);
+#else
+    len = recv(sock->fd, packet->payload, COAP_RXBUFFER_SIZE, 0);
+#endif
+    if (len < 0) {
+#ifdef _WIN32
+      if (WSAGetLastError() == WSAECONNRESET) {
+#else
+      if (errno == ECONNREFUSED) {
+#endif
+        /* client-side ICMP destination unreachable, ignore it */
+        coap_log(LOG_WARNING, "coap_network_read: unreachable\n");
+        return -2;
+      }
+      coap_log(LOG_WARNING, "coap_network_read: %s\n", coap_socket_strerror());
+      goto error;
+    } else if (len > 0) {
+      packet->length = (size_t)len;
     }
-    sock->remote_endpoint.addr.su.sun_family = AF_UNIX;
-    socklen_t socklen = sizeof(struct sockaddr_un);
-    sock->remote_endpoint.size = socklen;
-    packet->ifindex = sock->fd;
-    buffer[BUFFER_SIZE - 1] = '\000';
+  } else {
+#endif /* !(WITH_CONTIKI || RIOT_VERSION) */
+#if defined(_WIN32)
+    DWORD dwNumberOfBytesRecvd = 0;
+    int r;
+#endif
+#if !defined(WITH_CONTIKI)
+#ifdef HAVE_STRUCT_CMSGHDR
+    /* a buffer large enough to hold all packet info types, ipv6 is the largest */
+    char buf[CMSG_SPACE(sizeof(struct in6_pktinfo))];
+    struct cmsghdr *cmsg;
+    struct msghdr mhdr;
+    struct iovec iov[1];
 
-    coap_log(LOG_DEBUG, "coap_network_read: read got %zd bytes\n", len);
+    iov[0].iov_base = packet->payload;
+    iov[0].iov_len = (iov_len_t)COAP_RXBUFFER_SIZE;
 
-    switch (slip_packet[0]) {
-        case IP_HDR_VER4:
-            hdr_len = IP_HDR_SIZE_VER4;
-            payload_len = (len - hdr_len) < -1 ? -1 : len - hdr_len;
-            if (payload_len < 0) {
-                coap_log(LOG_ERR,
-                         "%s: receive header for ipv4 failed: %s (%d)\n",
-                         "coap_network_read",
-                         coap_socket_strerror(), errno);
+    memset(&mhdr, 0, sizeof(struct msghdr));
+
+    mhdr.msg_name = (struct sockaddr*)&packet->addr_info.remote.addr;
+    mhdr.msg_namelen = sizeof(packet->addr_info.remote.addr);
+
+    mhdr.msg_iov = iov;
+    mhdr.msg_iovlen = 1;
+
+    mhdr.msg_control = buf;
+    mhdr.msg_controllen = sizeof(buf);
+    /* set a big first length incase recvmsg() does not implement updating
+       msg_control as well as preset the first cmsg with bad data */
+    cmsg = (struct cmsghdr *)buf;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(buf));
+    cmsg->cmsg_level = -1;
+    cmsg->cmsg_type = -1;
+
+#if defined(_WIN32)
+    if (!lpWSARecvMsg) {
+      GUID wsaid = WSAID_WSARECVMSG;
+      DWORD cbBytesReturned = 0;
+      if (WSAIoctl(sock->fd, SIO_GET_EXTENSION_FUNCTION_POINTER, &wsaid, sizeof(wsaid), &lpWSARecvMsg, sizeof(lpWSARecvMsg), &cbBytesReturned, NULL, NULL) != 0) {
+        coap_log(LOG_WARNING, "coap_network_read: no WSARecvMsg\n");
+        return -1;
+      }
+    }
+    r = lpWSARecvMsg(sock->fd, &mhdr, &dwNumberOfBytesRecvd, NULL /* LPWSAOVERLAPPED */, NULL /* LPWSAOVERLAPPED_COMPLETION_ROUTINE */);
+    if (r == 0)
+      len = (ssize_t)dwNumberOfBytesRecvd;
+#else
+    len = recvmsg(sock->fd, &mhdr, 0);
+#endif
+
+#else /* ! HAVE_STRUCT_CMSGHDR */
+    len = recvfrom(sock->fd, packet->payload, COAP_RXBUFFER_SIZE, 0,
+                   &packet->addr_info.remote.addr.sa,
+                   &packet->addr_info.remote.size);
+#endif /* ! HAVE_STRUCT_CMSGHDR */
+
+    if (len < 0) {
+#ifdef _WIN32
+      if (WSAGetLastError() == WSAECONNRESET) {
+#else
+      if (errno == ECONNREFUSED) {
+#endif
+        /* server-side ICMP destination unreachable, ignore it. The destination address is in msg_name. */
+        return 0;
+    }
+      coap_log(LOG_WARNING, "coap_network_read: %s\n", coap_socket_strerror());
+      goto error;
+    } else {
+#ifdef HAVE_STRUCT_CMSGHDR
+      int dst_found = 0;
+
+      packet->addr_info.remote.size = mhdr.msg_namelen;
+      packet->length = (size_t)len;
+
+      /* Walk through ancillary data records until the local interface
+       * is found where the data was received. */
+      for (cmsg = CMSG_FIRSTHDR(&mhdr); cmsg; cmsg = CMSG_NXTHDR(&mhdr, cmsg)) {
+
+        /* get the local interface for IPv6 */
+        if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+          union {
+            uint8_t *c;
+            struct in6_pktinfo *p;
+          } u;
+          u.c = CMSG_DATA(cmsg);
+          packet->ifindex = (int)(u.p->ipi6_ifindex);
+          memcpy(&packet->addr_info.local.addr.sin6.sin6_addr,
+                 &u.p->ipi6_addr, sizeof(struct in6_addr));
+          dst_found = 1;
                 break;
             }
-            payload_len = len - hdr_len;
-            packet->addr_info.remote.size = sizeof(struct sockaddr_in);
-            packet->addr_info.local.size = sizeof(struct sockaddr_in);
-            packet->addr_info.remote.addr.sin.sin_family = AF_INET;
-            packet->addr_info.local.addr.sin.sin_family = AF_INET;
-            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
-            memcpy(&packet->addr_info.remote.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
-            memcpy(&packet->addr_info.local.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
-            packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
-            packet->addr_info.local.addr.sin.sin_port = htons(port);
-            break;
 
-        case IP_HDR_VER6:
-            hdr_len = IP_HDR_SIZE_VER6;
-            payload_len = len - hdr_len < -1 ? -1 : len - hdr_len;
-            if (payload_len < 0) {
-                coap_log(LOG_ERR,
-                         "%s: receive header fpr ipv6 failed: %s (%d)\n",
-                         "coap_network_read",
-                         coap_socket_strerror(), errno);
-                break;
+        /* local interface for IPv4 */
+#if defined(IP_PKTINFO)
+        if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_PKTINFO) {
+          union {
+            uint8_t *c;
+            struct in_pktinfo *p;
+          } u;
+          u.c = CMSG_DATA(cmsg);
+          packet->ifindex = u.p->ipi_ifindex;
+          if (packet->addr_info.local.addr.sa.sa_family == AF_INET6) {
+            memset(packet->addr_info.local.addr.sin6.sin6_addr.s6_addr, 0, 10);
+            packet->addr_info.local.addr.sin6.sin6_addr.s6_addr[10] = 0xff;
+            packet->addr_info.local.addr.sin6.sin6_addr.s6_addr[11] = 0xff;
+            memcpy(packet->addr_info.local.addr.sin6.sin6_addr.s6_addr + 12,
+                   &u.p->ipi_addr, sizeof(struct in_addr));
+          } else {
+            memcpy(&packet->addr_info.local.addr.sin.sin_addr,
+                   &u.p->ipi_addr, sizeof(struct in_addr));
+          }
+          dst_found = 1;
+            break;
             }
-            packet->addr_info.remote.size = sizeof(struct sockaddr_in6);
-            packet->addr_info.local.size = sizeof(struct sockaddr_in6);
-            packet->addr_info.remote.addr.sin6.sin6_family = AF_INET6;
-            packet->addr_info.local.addr.sin6.sin6_family = AF_INET6;
-            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
-                   sizeof(uint8_t) * 16);
-            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
-                   sizeof(uint8_t) * 16);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
-            packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
-            packet->addr_info.local.addr.sin.sin_port = htons(port);
+#elif defined(IP_RECVDSTADDR)
+        if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
+          packet->ifindex = sock->fd;
+          memcpy(&packet->addr_info.local.addr.sin.sin_addr,
+                 CMSG_DATA(cmsg), sizeof(struct in_addr));
+          dst_found = 1;
             break;
+        }
+#endif /* IP_PKTINFO */
+        if (!dst_found) {
+          /* cmsg_level / cmsg_type combination we do not understand
+             (ignore preset case for bad recvmsg() not updating cmsg) */
+          if (cmsg->cmsg_level != -1 && cmsg->cmsg_type != -1) {
+            coap_log(LOG_DEBUG,
+                     "cmsg_level = %d and cmsg_type = %d not supported - fix\n",
+                     cmsg->cmsg_level, cmsg->cmsg_type);
+          }
+        }
+      }
+      if (!dst_found) {
+        /* Not expected, but cmsg_level and cmsg_type don't match above and
+           may need a new case */
+        packet->ifindex = (int)sock->fd;
+        if (getsockname(sock->fd, &packet->addr_info.local.addr.sa,
+            &packet->addr_info.local.size) < 0) {
+          coap_log(LOG_DEBUG, "Cannot determine local port\n");
+        }
+      }
+#else /* ! HAVE_STRUCT_CMSGHDR */
+      packet->length = (size_t)len;
+      packet->ifindex = 0;
+      if (getsockname(sock->fd, &packet->addr_info.local.addr.sa,
+                      &packet->addr_info.local.size) < 0) {
+         coap_log(LOG_DEBUG, "Cannot determine local port\n");
+         goto error;
+      }
+#endif /* ! HAVE_STRUCT_CMSGHDR */
+    }
+#endif /* !defined(WITH_CONTIKI) && !defined(RIOT_VERSION) */
+#ifdef WITH_CONTIKI
+    /* FIXME: untested, make this work */
+#define UIP_IP_BUF   ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
+#define UIP_UDP_BUF  ((struct uip_udp_hdr *)&uip_buf[UIP_LLIPH_LEN])
 
-        default:
-            coap_log(LOG_ERR,
-                     "%s: ip address version not correct: %s (%d)\n",
-                     "coap_network_read",
-                     coap_socket_strerror(), errno);
-            break;
+    if (uip_newdata()) {
+      uip_ipaddr_copy(&packet->addr_info.remote.addr, &UIP_IP_BUF->srcipaddr);
+      packet->addr_info.remote.port = UIP_UDP_BUF->srcport;
+      uip_ipaddr_copy(&(packet)->addr_info.local.addr, &UIP_IP_BUF->destipaddr);
+      packet->addr_info.local.port = UIP_UDP_BUF->destport;
+
+      len = uip_datalen();
+
+      if (len > COAP_RXBUFFER_SIZE) {
+        /* FIXME: we might want to send back a response */
+        coap_log(LOG_WARNING, "discarded oversized packet\n");
+        return -1;
     }
-    if (payload_len > COAP_RXBUFFER_SIZE) {
-        coap_log(LOG_WARNING, "packet exceeds buffer size, truncated\n");
-        payload_len = COAP_RXBUFFER_SIZE;
+
+      ((char *)uip_appdata)[len] = 0;
+      if (LOG_DEBUG <= coap_get_log_level()) {
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 40
+#endif
+        unsigned char addr_str[INET6_ADDRSTRLEN + 8];
+
+        if (coap_print_addr(&packet->addr_info.remote, addr_str,
+                            INET6_ADDRSTRLEN + 8)) {
+          coap_log(LOG_DEBUG, "received %zd bytes from %s\n", len, addr_str);
+        }
     }
-    if (payload_len >= 0) {
-        packet->length = (payload_len > 0) ? payload_len : 0;
-        memset(packet->payload, '\000', COAP_RXBUFFER_SIZE);
-        memcpy(packet->payload, &slip_packet[hdr_len], payload_len);
+
+      packet->length = len;
+      memcpy(&packet->payload, uip_appdata, len);
+    }
+
+#undef UIP_IP_BUF
+#undef UIP_UDP_BUF
+#endif /* WITH_CONTIKI */
+#ifdef RIOT_VERSION
+    packet->src.size = sizeof(packet->src.addr);
+    len = recvfrom (sock->fd, packet->payload, COAP_RXBUFFER_SIZE,
+                    0, &packet->src.addr.sa, &packet->src.size);
         if (LOG_DEBUG <= coap_get_log_level()) {
             unsigned char addr_str[INET6_ADDRSTRLEN + 8];
 
-            if (coap_print_addr(&packet->addr_info.remote, addr_str, INET6_ADDRSTRLEN + 8)) {
-                coap_log(LOG_DEBUG, "received %zd bytes from %s\n", payload_len, addr_str);
-            }
+      if (coap_print_addr(&packet->src, addr_str, INET6_ADDRSTRLEN + 8)) {
+        coap_log(LOG_DEBUG, "received %zd bytes from %s\n", len, addr_str);
         }
     }
-    return payload_len;
+#endif /* RIOT_VERSION */
+#if !defined(WITH_CONTIKI) && !defined(RIOT_VERSION)
+  }
+#endif /* !(WITH_CONTIKI || RIOT_VERSION) */
 
+  if (len >= 0)
+    return len;
+#if !defined(WITH_CONTIKI) && !defined(RIOT_VERSION)
+error:
+#endif
+  return -1;
 }
-
 #endif /* RIOT_VERSION */
 
 #if !defined(WITH_CONTIKI)
@@ -938,7 +1011,7 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
     return 0;
 #else /* COAP_EPOLL_SUPPORT */
     coap_socket_t *sockets[1];
-    unsigned int max_sockets = sizeof(sockets) / sizeof(sockets[0]);
+  unsigned int max_sockets = sizeof(sockets)/sizeof(sockets[0]);
     unsigned int num_sockets;
     unsigned int timeout;
 
@@ -985,7 +1058,8 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
                        coap_socket_t *sockets[],
                        unsigned int max_sockets,
                        unsigned int *num_sockets,
-                       coap_tick_t now) {
+           coap_tick_t now)
+{
         coap_queue_t *nextpdu;
         coap_endpoint_t *ep;
         coap_session_t *s, *rtmp;
@@ -993,8 +1067,8 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
         coap_tick_t timeout = 0;
         coap_tick_t s_timeout;
 #ifdef COAP_EPOLL_SUPPORT
-        (void) sockets;
-        (void) max_sockets;
+  (void)sockets;
+  (void)max_sockets;
 #endif /* COAP_EPOLL_SUPPORT */
 
         *num_sockets = 0;
@@ -1054,7 +1128,8 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
                     ) {
                 if (s->last_rx_tx + ctx->ping_timeout * COAP_TICKS_PER_SECOND <= now) {
                     if ((s->last_ping > 0 && s->last_pong < s->last_ping)
-                        || ((s->last_ping_mid = coap_session_send_ping(s)) == COAP_INVALID_MID)) {
+          || ((s->last_ping_mid = coap_session_send_ping(s)) == COAP_INVALID_MID))
+        {
                         /* Make sure the session object is not deleted in the callback */
                         coap_session_reference(s);
                         coap_session_disconnected(s, COAP_NACK_NOT_DELIVERABLE);
@@ -1111,7 +1186,7 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             nextpdu = coap_peek_next(ctx);
         }
 
-        if (nextpdu && (timeout == 0 || nextpdu->t - (now - ctx->sendqueue_basetime) < timeout))
+  if (nextpdu && (timeout == 0 || nextpdu->t - ( now - ctx->sendqueue_basetime ) < timeout))
             timeout = nextpdu->t - (now - ctx->sendqueue_basetime);
 
         if (ctx->dtls_context) {
@@ -1121,7 +1196,7 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
                     if (tls_timeout < now + COAP_TICKS_PER_SECOND / 10)
                         tls_timeout = now + COAP_TICKS_PER_SECOND / 10;
                     coap_log(LOG_DEBUG, "** DTLS global timeout set to %dms\n",
-                             (int) ((tls_timeout - now) * 1000 / COAP_TICKS_PER_SECOND));
+                 (int)((tls_timeout - now) * 1000 / COAP_TICKS_PER_SECOND));
                     if (timeout == 0 || tls_timeout - now < timeout)
                         timeout = tls_timeout - now;
                 }
@@ -1176,11 +1251,10 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             }
         }
 
-        return (unsigned int) ((timeout * 1000 + COAP_TICKS_PER_SECOND - 1) / COAP_TICKS_PER_SECOND);
+  return (unsigned int)((timeout * 1000 + COAP_TICKS_PER_SECOND - 1) / COAP_TICKS_PER_SECOND);
     }
 
 #ifndef RIOT_VERSION
-
     int
     coap_io_process(coap_context_t *ctx, uint32_t timeout_ms) {
         return coap_io_process_with_fds(ctx, timeout_ms, 0, NULL, NULL, NULL);
@@ -1318,10 +1392,10 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             }
 
 #else /* COAP_EPOLL_SUPPORT */
-        (void) ereadfds;
-        (void) ewritefds;
-        (void) eexceptfds;
-        (void) enfds;
+  (void)ereadfds;
+  (void)ewritefds;
+  (void)eexceptfds;
+  (void)enfds;
 
         timeout = coap_io_prepare_epoll(ctx, before);
 
@@ -1335,10 +1409,12 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             /* Potentially adjust based on what the caller wants */
             if (timeout_ms == COAP_IO_NO_WAIT) {
                 etimeout = 0;
-            } else if (timeout == COAP_IO_WAIT) {
+    }
+    else if (timeout == COAP_IO_WAIT) {
                 /* coap_io_prepare_epoll() returned 0 and timeout_ms COAP_IO_WAIT (0) */
                 etimeout = -1;
-            } else if (etimeout < 0) {
+    }
+    else if (etimeout < 0) {
                 /* epoll_wait cannot wait longer than this as int timeout parameter */
                 etimeout = INT_MAX;
             }
@@ -1346,7 +1422,7 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
             nfds = epoll_wait(ctx->epfd, events, COAP_MAX_EPOLL_EVENTS, etimeout);
             if (nfds < 0) {
                 if (errno != EINTR) {
-                    coap_log(LOG_ERR, "epoll_wait: unexpected error: %s (%d)\n",
+        coap_log (LOG_ERR, "epoll_wait: unexpected error: %s (%d)\n",
                              coap_socket_strerror(), nfds);
                 }
                 break;
@@ -1378,9 +1454,8 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
         coap_mutex_unlock(&static_mutex);
 #endif /* COAP_CONSTRAINED_STACK */
 
-        return (int) (((now - before) * 1000) / COAP_TICKS_PER_SECOND);
+  return (int)(((now - before) * 1000) / COAP_TICKS_PER_SECOND);
     }
-
 #endif /* RIOT_VERSION */
 
 #else /* WITH_CONTIKI */
@@ -1419,15 +1494,12 @@ coap_io_prepare_epoll(coap_context_t *ctx, coap_tick_t now) {
         return coap_socket_format_errno(WSAGetLastError());
     }
 #else /* _WIN32 */
-
     const char *coap_socket_format_errno(int error) {
         return strerror(error);
     }
-
     const char *coap_socket_strerror(void) {
         return coap_socket_format_errno(errno);
     }
-
 #endif /* _WIN32 */
 
     ssize_t
