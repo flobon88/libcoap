@@ -12,7 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <ctype.h>
+    #include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -104,8 +104,8 @@ static int verify_peer_cert = 1; /* PKI granularity - by default set */
 #define MAX_KEY   64 /* Maximum length of a pre-shared key in bytes. */
 static uint8_t *key = NULL;
 static ssize_t key_length = 0;
-int key_defined = 1;
-static const char *hint = "CoAP";
+int key_defined = 0;
+static const char *hint = NULL;
 static int support_dynamic = 0;
 static uint32_t block_mode = COAP_BLOCK_USE_LIBCOAP;
 static int echo_back = 0;
@@ -2718,7 +2718,6 @@ main(int argc, char **argv) {
     ctx = get_context(addr_str, port_str);
     if (!ctx)
         return -1;
-
     init_resources(ctx);
     coap_context_set_block_mode(ctx, block_mode);
 
@@ -2728,7 +2727,6 @@ main(int argc, char **argv) {
     /* join multicast group if requested at command line */
     if (group)
         coap_join_mcast_group_intf(ctx, group, group_if);
-
     coap_fd = coap_context_get_coap_fd(ctx);
     if (coap_fd != -1) {
         /* if coap_fd is -1, then epoll is not supported within libcoap */
@@ -2772,6 +2770,7 @@ main(int argc, char **argv) {
             tv.tv_sec = wait_ms / 1000;
             tv.tv_usec = (wait_ms % 1000) * 1000;
             /* Wait until any i/o takes place or timeout */
+            //TODO KOMMT HIER REIN
             result = select (nfds, &readfds, NULL, NULL, &tv);
             if (result == -1) {
                 if (errno != EAGAIN) {
@@ -2781,6 +2780,7 @@ main(int argc, char **argv) {
             }
             if (result > 0) {
                 if (FD_ISSET(coap_fd, &readfds)) {
+                    //TODO KOMMT HIER NICHT REIN
                     result = coap_io_process(ctx, COAP_IO_NO_WAIT);
                 }
             }

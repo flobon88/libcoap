@@ -45,6 +45,9 @@
 #include <sys/timerfd.h>
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
+#include <bits/types/FILE.h>
+#include <stdio.h>
+
 #endif
 #endif /* COAP_EPOLL_SUPPORT */
 
@@ -228,7 +231,7 @@ coap_socket_bind_udp(coap_socket_t *sock,
                  coap_socket_strerror());
         goto error;
     }
-
+    //TODO HIER KOMMT ER HIN
     return 1;
 
     error:
@@ -568,7 +571,7 @@ static __declspec(thread) LPFN_WSARECVMSG lpWSARecvMsg = NULL;
 ssize_t
 coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint8_t *data, size_t datalen) {
     ssize_t bytes_written = 0;
-
+    //TODO KOMMT HIER NICHT REIN
   if (!coap_debug_send_packet()) {
     bytes_written = (ssize_t)datalen;
 #ifndef WITH_CONTIKI
@@ -732,7 +735,6 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
 
   if (bytes_written < 0)
     coap_log(LOG_CRIT, "coap_network_send: %s\n", coap_socket_strerror());
-
     return bytes_written;
 }
 #endif /* RIOT_VERSION */
@@ -749,7 +751,7 @@ coap_packet_get_memmapped(coap_packet_t *packet, unsigned char **address, size_t
 ssize_t
 coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
   ssize_t len = -1;
-
+    //TODO KOMMT HIER NICHT REIN
     assert(sock);
     assert(packet);
 
@@ -837,7 +839,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
                    &packet->addr_info.remote.addr.sa,
                    &packet->addr_info.remote.size);
 #endif /* ! HAVE_STRUCT_CMSGHDR */
-
+      //TODO KOMMT HIER NCIHT REIN
     if (len < 0) {
 #ifdef _WIN32
       if (WSAGetLastError() == WSAECONNRESET) {

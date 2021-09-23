@@ -659,10 +659,27 @@ coap_endpoint_get_session(coap_endpoint_t *endpoint,
     if (payload[OFF_CONTENT_TYPE] != DTLS_CT_HANDSHAKE ||
         payload[OFF_HANDSHAKE_TYPE] != DTLS_HT_CLIENT_HELLO) {
       /* only log if not a late alert */
-      if (payload[OFF_CONTENT_TYPE] != DTLS_CT_ALERT)
+      if (payload[OFF_CONTENT_TYPE] != DTLS_CT_ALERT){
+
         coap_log(LOG_DEBUG,
          "coap_dtls_hello: ContentType %d Handshake %d dropped\n",
          payload[OFF_CONTENT_TYPE], payload[OFF_HANDSHAKE_TYPE]);
+          //////////////
+          FILE * fPtr;
+          char path[] = "coap_endpoint_get_session.txt";
+          char text[] = "payload[OFF_CONTENT_TYPE] != DTLS_CT_HANDSHAKE ||\n"
+                        "payload[OFF_HANDSHAKE_TYPE] != DTLS_HT_CLIENT_HELLO\n";
+
+          fPtr = fopen(path, "w");
+          if(fPtr == NULL) {
+              printf("Unable to create file.\n");
+              exit(EXIT_FAILURE);
+          }
+          fputs((const char*) text, fPtr);
+          fclose(fPtr);
+          printf("File created and saved successfully. :) \n");
+          /////////////
+      }
       return NULL;
     }
   }
