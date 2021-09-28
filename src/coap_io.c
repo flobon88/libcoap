@@ -231,7 +231,6 @@ coap_socket_bind_udp(coap_socket_t *sock,
                  coap_socket_strerror());
         goto error;
     }
-    //TODO HIER KOMMT ER HIN
     return 1;
 
     error:
@@ -357,7 +356,6 @@ coap_socket_connect_udp(coap_socket_t *sock,
         coap_log(LOG_WARNING, "coap_socket_connect_udp: getpeername: %s\n",
                  coap_socket_strerror());
     }
-
     sock->flags |= COAP_SOCKET_CONNECTED;
     return 1;
 
@@ -732,7 +730,6 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
     bytes_written = datalen;
 #endif /* WITH_CONTIKI */
     }
-
   if (bytes_written < 0)
     coap_log(LOG_CRIT, "coap_network_send: %s\n", coap_socket_strerror());
     return bytes_written;
@@ -839,7 +836,6 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
                    &packet->addr_info.remote.addr.sa,
                    &packet->addr_info.remote.size);
 #endif /* ! HAVE_STRUCT_CMSGHDR */
-      //TODO KOMMT HIER NCIHT REIN
     if (len < 0) {
 #ifdef _WIN32
       if (WSAGetLastError() == WSAECONNRESET) {
