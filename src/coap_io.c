@@ -459,9 +459,9 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
             break;
         case AF_UNIX:
-            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,
-                    sizeof(connect_addr.addr.su.sun_path) - 1);
+            //strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,sizeof(connect_addr.addr.su.sun_path) - 1);
             //connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
+            break;
         default:
             coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");
             break;
@@ -751,18 +751,6 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
 
     switch (session->addr_info.remote.addr.sa.sa_family) {
 
-        case AF_INET:
-            ip_packet[0] = IP_HDR_VER4;
-            packet_index = IP_HDR_SIZE_VER4;
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_addr,
-                   sizeof(in_addr_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_port,
-                   sizeof(in_port_t));
-            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_port,
-                   sizeof(in_port_t));
-            break;
 
         case AF_INET6:
             ip_packet[0] = IP_HDR_VER6;
@@ -777,6 +765,19 @@ coap_network_send(coap_socket_t *sock, const coap_session_t *session, const uint
                    sizeof(in_port_t));
             break;
 
+        //case AF_INET:
+        default:
+            ip_packet[0] = IP_HDR_VER4;
+            packet_index = IP_HDR_SIZE_VER4;
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_addr,
+                   sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_addr,
+                   sizeof(in_addr_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], &session->addr_info.remote.addr.sin.sin_port,
+                   sizeof(in_port_t));
+            memcpy(&ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], &session->addr_info.local.addr.sin.sin_port,
+                   sizeof(in_port_t));
+            break;
     }
     memcpy(&ip_packet[packet_index], data, datalen);
 

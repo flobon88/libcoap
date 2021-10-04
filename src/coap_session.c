@@ -142,6 +142,10 @@ coap_make_session(coap_proto_t proto, coap_session_type_t type,
       coap_log(LOG_ERR, "DTLS overhead exceeds MTU\n");
     }
   }
+  if(remote_addr->addr.sa.sa_family == AF_UNIX){
+      memcpy(&(session->sock.remote_endpoint),remote_addr, sizeof(coap_address_t));
+      //session->sock.remote_endpoint.addr.
+  }
   session->max_retransmit = COAP_DEFAULT_MAX_RETRANSMIT;
   session->ack_timeout = COAP_DEFAULT_ACK_TIMEOUT;
   session->ack_random_factor = COAP_DEFAULT_ACK_RANDOM_FACTOR;
@@ -282,7 +286,7 @@ ssize_t coap_session_send(coap_session_t *session, const uint8_t *data, size_t d
   }
 
   bytes_written = coap_socket_send(sock, session, data, datalen);
-  if (bytes_written == (ssize_t)datalen) {
+  if (bytes_written == (ssize_t)datalen || sock->remote_endpoint.addr.sa.sa_family == AF_UNIX) {
     coap_ticks(&session->last_rx_tx);
     coap_log(LOG_DEBUG, "*  %s: sent %zd bytes\n",
              coap_session_str(session), datalen);

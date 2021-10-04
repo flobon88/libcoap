@@ -218,6 +218,9 @@ coap_new_request(coap_context_t *ctx,
 static int
 resolve_address(const coap_str_const_t *server, struct sockaddr *dst) {
 
+    if(dst != NULL && dst->sa_family == AF_UNIX){
+        return sizeof(struct sockaddr_un);
+    }
     struct addrinfo *res, *ainfo;
     struct addrinfo hints;
     static char addrstr[256];
@@ -1314,7 +1317,6 @@ open_session(
         size_t key_len
 ) {
     coap_session_t *session;
-
     if (proto == COAP_PROTO_DTLS || proto == COAP_PROTO_TLS) {
         /* Encrypted session */
         if (root_ca_file || ca_file || cert_file) {
@@ -1352,8 +1354,19 @@ get_session(
         size_t key_len
 ) {
     coap_session_t *session = NULL;
-
+    if(dst->addr.sa.sa_family == AF_UNIX){
+        coap_address_t bind_addr;
+        bind_addr.size = strlen(local_addr);
+        bind_addr.addr.su.sun_family = AF_UNIX;
+        memset(bind_addr.addr.su.sun_path,'\000',108);
+        memcpy(bind_addr.addr.su.sun_path,local_addr,bind_addr.size);
+        unlink(bind_addr.addr.su.sun_path);
+        session = open_session(ctx, proto, &bind_addr, dst,
+                               identity, identity_len, key, key_len);
+        return session;
+    }
     if (local_addr) {
+
         int s;
         struct addrinfo hints;
         struct addrinfo *result = NULL, *rp;
@@ -1394,7 +1407,7 @@ int
 main(int argc, char **argv) {
     coap_context_t *ctx = NULL;
     coap_session_t *session = NULL;
-    coap_address_t dst;
+    coap_address_t dst, dst_unix;
     static char addr[INET6_ADDRSTRLEN];
     void *addrptr = NULL;
     int result = -1;
@@ -1414,7 +1427,7 @@ main(int argc, char **argv) {
     struct sigaction sa;
 #endif
 
-    while ((opt = getopt(argc, argv, "a:b:c:e:f:h:j:k:l:m:no:p:rs:t:u:v:wA:B:C:H:J:K:L:M:NO:P:R:T:U")) != -1) {
+    while ((opt = getopt(argc, argv, "a:b:c:e:f:h:j:k:l:m:no:p:rs:t:u:v:wA:x:B:C:H:J:K:L:M:NO:P:R:T:U")) != -1) {
         switch (opt) {
             case 'a':
                 strncpy(node_str, optarg, NI_MAXHOST - 1);
@@ -1434,6 +1447,12 @@ main(int argc, char **argv) {
                 break;
             case 'R':
                 root_ca_file = optarg;
+                break;
+            case 'x':
+                memset(&dst.addr.sa,'\000', sizeof(dst.addr.sa));
+                dst.size = sizeof(struct sockaddr_un);
+                strncpy(dst.addr.su.sun_path, optarg, sizeof(dst.addr.su.sun_path));
+                dst.addr.su.sun_family = AF_UNIX;
                 break;
             case 'e':
                 if (!cmdline_input(optarg, &payload))
@@ -1594,18 +1613,21 @@ main(int argc, char **argv) {
     coap_context_set_keepalive(ctx, ping_seconds);
     coap_context_set_block_mode(ctx, block_mode);
 
-    dst.size = res;
-    dst.addr.sin.sin_port = htons(port);
+    if(dst.addr.sa.sa_family != AF_UNIX){
+        dst.size = res;
+        dst.addr.sin.sin_port = htons(port);
+    }
 
     session = get_session(
             ctx,
-            node_str[0] ? node_str : NULL, port_str,
+            node_str[0] ? node_str : NULL,
+            port_str,
             scheme == COAP_URI_SCHEME_COAP_TCP ? COAP_PROTO_TCP :
             scheme == COAP_URI_SCHEME_COAPS_TCP ? COAP_PROTO_TLS :
             (reliable ?
              scheme == COAP_URI_SCHEME_COAPS ? COAP_PROTO_TLS : COAP_PROTO_TCP
                       : scheme == COAP_URI_SCHEME_COAPS ? COAP_PROTO_DTLS : COAP_PROTO_UDP),
-            &dst,
+            &dst,//dst_unix.addr.sa.sa_family == AF_UNIX ? &dst_unix : &dst,
             user_length >= 0 ? user : NULL,
             user_length >= 0 ? user_length : 0,
             key_length > 0 ? key : NULL,
@@ -1627,6 +1649,9 @@ main(int argc, char **argv) {
             break;
         case AF_INET6:
             addrptr = &dst.addr.sin6.sin6_addr;
+            break;
+        case AF_UNIX:
+            addrptr = &dst.addr.su.sun_path;
             break;
         default:;
     }
@@ -1659,7 +1684,7 @@ main(int argc, char **argv) {
         goto finish;
     }
 
-    coap_log(LOG_DEBUG, "sending CoAP request:\n");
+     coap_log(LOG_DEBUG, "sending CoAP request:\n");
     if (coap_get_log_level() < LOG_DEBUG)
         coap_show_pdu(LOG_INFO, pdu);
 

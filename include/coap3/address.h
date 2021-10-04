@@ -164,6 +164,7 @@ coap_address_copy( coap_address_t *dst, const coap_address_t *src ) {
   } else if ( src->addr.sa.sa_family == AF_INET ) {
     dst->addr.sin = src->addr.sin;
   } else if ( src->addr.sa.sa_family == AF_UNIX) {
+    dst->addr.su.sun_family = src->addr.su.sun_family;
     dst->addr.su = src->addr.su;
   } else {
     memcpy( &dst->addr, &src->addr, src->size );
