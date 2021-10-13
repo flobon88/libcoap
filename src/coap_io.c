@@ -459,8 +459,8 @@ coap_socket_connect_udp(coap_socket_t *sock,
 #endif /* RIOT_VERSION */
             break;
         case AF_UNIX:
-            //strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,sizeof(connect_addr.addr.su.sun_path) - 1);
-            //connect_addr.addr.su.sun_path[sizeof(connect_addr.addr.su.sun_path) - 1] = '\000';
+            strncpy(connect_addr.addr.su.sun_path, connect_addr.addr.su.sun_path,
+                    sizeof(connect_addr.addr.su.sun_path) - 1);
             break;
         default:
             coap_log(LOG_ALERT, "coap_socket_connect_udp: unsupported sa_family\n");

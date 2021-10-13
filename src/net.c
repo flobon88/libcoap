@@ -1431,20 +1431,6 @@ coap_handle_dgram_for_proto(coap_context_t *ctx, coap_session_t *session, coap_p
   coap_packet_get_memmapped(packet, &data, &data_len);
 
   if (session->proto == COAP_PROTO_DTLS) {
-      //////////////
-      FILE * fPtr;
-      char path[] = "COAP_PROTO_DTLS_IS_DA.txt";
-      char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-      fPtr = fopen(path, "w");
-      if(fPtr == NULL) {
-          printf("Unable to create file.\n");
-          exit(EXIT_FAILURE);
-      }
-      fputs((const char*) text, fPtr);
-      fclose(fPtr);
-      printf("File created and saved successfully. :) \n");
-      /////////////
     if (session->type == COAP_SESSION_TYPE_HELLO){
 
       result = coap_dtls_hello(session, data, data_len);
