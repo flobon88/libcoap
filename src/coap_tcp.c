@@ -51,7 +51,7 @@ coap_socket_connect_tcp1(coap_socket_t *sock,
   coap_address_copy( &connect_addr, server );
 
   sock->flags &= ~COAP_SOCKET_CONNECTED;
-  sock->fd = socket(server->addr.sa.sa_family, SOCK_STREAM, 0);
+  sock->fd = socket(server->addr.sa.sa_family, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
   if (sock->fd == COAP_INVALID_SOCKET) {
     coap_log(LOG_WARNING,
@@ -200,7 +200,7 @@ coap_socket_bind_tcp(coap_socket_t *sock,
   u_long u_on = 1;
 #endif
 
-  sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_STREAM, 0);
+  sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
   if (sock->fd == COAP_INVALID_SOCKET) {
     coap_log(LOG_WARNING, "coap_socket_bind_tcp: socket: %s\n",

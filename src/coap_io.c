@@ -317,7 +317,7 @@ coap_socket_bind_udp(coap_socket_t *sock,
         unlink(listen_addr->addr.su.sun_path);
     }
 
-    sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM, 0);
+    sock->fd = socket(listen_addr->addr.sa.sa_family, SOCK_DGRAM | SOCK_NONBLOCK, 0);
 
     if (sock->fd == COAP_INVALID_SOCKET) {
         coap_log(LOG_WARNING,
@@ -423,7 +423,7 @@ coap_socket_connect_udp(coap_socket_t *sock,
     coap_address_copy(&connect_addr, server);
 
     sock->flags &= ~(COAP_SOCKET_CONNECTED | COAP_SOCKET_MULTICAST);
-    sock->fd = socket(connect_addr.addr.sa.sa_family, SOCK_DGRAM, 0);
+    sock->fd = socket(connect_addr.addr.sa.sa_family, SOCK_DGRAM | SOCK_NONBLOCK, 0);
 
     if (sock->fd == COAP_INVALID_SOCKET) {
         coap_log(LOG_WARNING, "coap_socket_connect_udp: socket: %s\n",
