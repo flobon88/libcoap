@@ -231,22 +231,29 @@ ssize_t recv_packet(uint8_t *p, const uint8_t *data, size_t len) {
     return received;
 }
 
-ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd) {
-    uint8_t c[BUFFER_SIZE];
+ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd, struct sockaddr* sockaddr, socklen_t* socklen ) {
+    uint8_t c[len];
     ssize_t received = 0;
-    ssize_t index = 0;
-    ssize_t received_packet_len = -1;
-
+    ssize_t received_packet_len;
+    memset(p, '\000', len);
     do {
-        memset(c,'\000',BUFFER_SIZE);
-        received_packet_len = recv(fd, c, len, 0);
+        memset(c, '\000', len);
+        received_packet_len = recvfrom(fd, c, len, 0, sockaddr, socklen);
+
+        /* Wenn sockaddr oder socklen NULL ist,
+         * wird es vermutlich mit TCP ausgeführt, was aber noch nicht unterstützt wird. */
+        if(!(sockaddr && socklen)){
+            memcpy(p,c,len);
+            return received_packet_len;
+        }
+
         if (received_packet_len == -1 && errno != EAGAIN) {
             coap_log(LOG_ERR,
                      "%s: read AF_UNIX socket failed: %s (%d)\n",
                      "coap_network_read",
                      coap_socket_strerror(), errno);
         }
-        for (int index = 0; index < received_packet_len; index++) {
+        for (ssize_t index = 0; index < received_packet_len; index++) {
 
             switch (c[index]) {
 
@@ -261,8 +268,8 @@ ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd) {
                         index++;
                     } else {
                         index = 0;
-                        memset(&c, 0, UINT16_MAX);
-                        received_packet_len = recv(fd, c, len, 0);
+                        memset(c, '\000', len);
+                        received_packet_len = recvfrom(fd, c, len, 0, sockaddr, socklen);
                         if (received_packet_len == -1 && errno != EAGAIN) {
                             coap_log(LOG_ERR,
                                      "%s: read AF_UNIX socket failed or wrong SLIP protocol: %s (%d)\n",
@@ -284,30 +291,87 @@ ssize_t slip_recv_packet(uint8_t *p, size_t len, coap_fd_t fd) {
 
                 default:
                     p[received++] = c[index];
-
             }
         }
-    } while (received_packet_len > 0);
-    return received;
+    } while(received_packet_len > 0);
+
+    return received == 0 && received_packet_len == -1 ? -1 : received;
 }
+
+/*void test_send_packet(p, len)
+        char *p;
+        int len; {
+    send_char(SLIP_END);
+    while(len--) {
+        switch(*p) {
+            case SLIP_END:
+                send_char(SLIP_ESC);
+                send_char(SLIP_ESC_END);
+                break;
+
+            case SLIP_ESC:
+                send_char(SLIP_ESC);
+                send_char(SLIP_ESC_ESC);
+                break;
+
+            default:
+                send_char(*p);
+        }
+
+        p++;
+    }
+    send_char(SLIP_END);
+}*/
+
+
+/*int test_recv_packet(uint8_t *p, size_t len, coap_fd_t fd, struct sockaddr* sockaddr, socklen_t* socklen) {
+    char c;
+    int received = 0;
+    ssize_t received_packet_len;
+    while(len--) {
+        //c = recv_char();
+        received_packet_len = recvfrom(fd, &c, 1, 0, sockaddr, socklen);
+        switch(c) {
+            case SLIP_END:
+                if(received)
+                    return received;
+                else
+                    break;
+            case SLIP_ESC:
+                //c = recv_char();
+                received_packet_len = recvfrom(fd, &c, 1, 0, sockaddr, socklen);
+                switch(c) {
+                    case SLIP_ESC_END:
+                        c = (char) SLIP_END;
+                        break;
+                    case SLIP_ESC_ESC:
+                        c = (char) SLIP_END;
+                        break;
+                }
+            default:
+                if(received < len)
+                    p[received++] = c;
+        }
+    }
+}*/
 
 
 coap_endpoint_t *
 coap_malloc_endpoint(void) {
-    return (coap_endpoint_t *) coap_malloc_type(COAP_ENDPOINT, sizeof(coap_endpoint_t));
+return (coap_endpoint_t *) coap_malloc_type(COAP_ENDPOINT, sizeof(coap_endpoint_t));
 }
 
 void
 coap_mfree_endpoint(coap_endpoint_t *ep) {
-    coap_free_type(COAP_ENDPOINT, ep);
+coap_free_type(COAP_ENDPOINT, ep);
 }
 
 int
 coap_socket_bind_udp(coap_socket_t *sock,
-                     const coap_address_t *listen_addr,
-                     coap_address_t *bound_addr) {
+          const coap_address_t *listen_addr,
+          coap_address_t *bound_addr) {
 #ifndef RIOT_VERSION
-    int on = 1, off = 0;
+int on = 1, off = 0;
 #endif /* RIOT_VERSION */
 #ifdef _WIN32
     u_long u_on = 1;
@@ -657,8 +721,9 @@ coap_socket_read(coap_socket_t *sock, uint8_t *data, size_t data_len) {
 #ifdef _WIN32
     r = recv(sock->fd, (char *)data, (int)data_len, 0);
 #else
-    //r = slip_recv_packet(data, data_len, sock->fd);
-    r = recv(sock->fd, data, data_len, 0);
+    //r = slip_recv_packet(data, data_len, sock->fd,NULL,NULL);
+    r = recv( sock->fd, data, data_len, 0);
+
 #endif
     if (r == 0) {
         /* graceful shutdown */
@@ -825,10 +890,9 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
     socklen_t sock_size = sizeof(struct sockaddr_un);
     memset(&sock->remote_endpoint, 0, sizeof(coap_address_t));
-    len = recvfrom(sock->fd, ip_packet, BUFFER_SIZE, 0, (struct sockaddr *) &sock->remote_endpoint, &sock_size);
-    uint8_t slip_packet[len];
-    memset(slip_packet, 0, len);
-    len = recv_packet(slip_packet, ip_packet, len);
+
+    len = slip_recv_packet(ip_packet,BUFFER_SIZE,sock->fd,(struct sockaddr *) &sock->remote_endpoint, &sock_size);
+
 
     char path[108];
     memset(path, 0, 108);
@@ -848,7 +912,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
 
     coap_log(LOG_DEBUG, "coap_network_read: read got %zd bytes\n", len);
 
-    switch (slip_packet[0]) {
+    switch (ip_packet[0]) {
         case IP_HDR_VER4:
             hdr_len = IP_HDR_SIZE_VER4;
             payload_len = (len - hdr_len) < -1 ? -1 : len - hdr_len;
@@ -864,13 +928,13 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in);
             packet->addr_info.remote.addr.sin.sin_family = AF_INET;
             packet->addr_info.local.addr.sin.sin_family = AF_INET;
-            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
+            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER4], sizeof(in_addr_t));
             memcpy(&packet->addr_info.remote.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&ip_address, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
+            memcpy(&ip_address, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER4], sizeof(in_addr_t));
             memcpy(&packet->addr_info.local.addr.sin.sin_addr, &ip_address, sizeof(in_addr_t));
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER4], sizeof(in_port_t));
             packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER4], sizeof(in_port_t));
             packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
 
@@ -879,7 +943,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             payload_len = len - hdr_len < -1 ? -1 : len - hdr_len;
             if (payload_len < 0) {
                 coap_log(LOG_ERR,
-                         "%s: receive header fpr ipv6 failed: %s (%d)\n",
+                         "%s: receive header for ipv6 failed: %s (%d)\n",
                          "coap_network_read",
                          coap_socket_strerror(), errno);
                 break;
@@ -888,13 +952,13 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
             packet->addr_info.local.size = sizeof(struct sockaddr_in6);
             packet->addr_info.remote.addr.sin6.sin6_family = AF_INET6;
             packet->addr_info.local.addr.sin6.sin6_family = AF_INET6;
-            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
+            memcpy(&packet->addr_info.remote.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_REMOTE_VER6],
                    sizeof(uint8_t) * 16);
-            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &slip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
+            memcpy(&packet->addr_info.local.addr.sin6.sin6_addr, &ip_packet[IP_HDR_INDEX_ADDR_LOCAL_VER6],
                    sizeof(uint8_t) * 16);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_REMOTE_VER6], sizeof(in_port_t));
             packet->addr_info.remote.addr.sin.sin_port = htons(port);
-            memcpy(&port, &slip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
+            memcpy(&port, &ip_packet[IP_HDR_INDEX_PORT_LOCAL_VER6], sizeof(in_port_t));
             packet->addr_info.local.addr.sin.sin_port = htons(port);
             break;
 
@@ -912,7 +976,7 @@ coap_network_read(coap_socket_t *sock, coap_packet_t *packet) {
     if (payload_len >= 0) {
         packet->length = (payload_len > 0) ? payload_len : 0;
         memset(packet->payload, '\000', COAP_RXBUFFER_SIZE);
-        memcpy(packet->payload, &slip_packet[hdr_len], payload_len);
+        memcpy(packet->payload, &ip_packet[hdr_len], payload_len);
         if (LOG_DEBUG <= coap_get_log_level()) {
             unsigned char addr_str[INET6_ADDRSTRLEN + 8];
 

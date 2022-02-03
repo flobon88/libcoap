@@ -1709,20 +1709,6 @@ coap_read_endpoint(coap_context_t *ctx, coap_endpoint_t *endpoint, coap_tick_t n
       result = coap_handle_dgram_for_proto(ctx, session, packet);
       if (endpoint->proto == COAP_PROTO_DTLS && session->type == COAP_SESSION_TYPE_HELLO && result == 1){
         coap_session_new_dtls_session(session, now);
-        //////////////
-        FILE * fPtr;
-        char path[] = "DieDateiSollteEsGebenDenkeIch.txt";
-        char text[] = "coap_dtls_hello: ContentType %d Handshake %d dropped\n";
-
-        fPtr = fopen(path, "w");
-        if(fPtr == NULL) {
-            printf("Unable to create file.\n");
-            exit(EXIT_FAILURE);
-        }
-        fputs((const char*) text, fPtr);
-        fclose(fPtr);
-        printf("File created and saved successfully. :) \n");
-        /////////////
       }
     }
   }
